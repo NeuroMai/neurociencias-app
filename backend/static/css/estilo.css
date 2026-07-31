@@ -1,0 +1,109 @@
+:root {
+  --udp-red: #e31b23;
+  --udp-black: #111111;
+  --udp-gray: #f4f5f7;
+  --udp-white: #ffffff;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--udp-gray);
+  color: var(--udp-black);
+  margin: 0;
+  padding: 0;
+}
+
+header {
+  background-color: var(--udp-white);
+  border-bottom: 3px solid var(--udp-red);
+  padding: 15px 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.logo-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.logo-header img {
+  height: 55px;
+}
+
+.brand-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--udp-black);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.container {
+  max-width: 900px;
+  margin: 30px auto;
+  background: var(--udp-white);
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+h1, h2, h3 {
+  color: var(--udp-black);
+}
+
+.btn-udp {
+  background-color: var(--udp-red);
+  color: var(--udp-white);
+  border: none;
+  padding: 10px 20px;
+  font-weight: bold;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-udp:hover {
+  background-color: #b81218;
+}
+
+.btn-dark {
+  background-color: var(--udp-black);
+  color: var(--udp-white);
+  border: none;
+  padding: 10px 20px;
+  font-weight: bold;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.card-pregunta {
+  border-left: 4px solid var(--udp-red);
+  background: #fafafa;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+}
+
+input[type="text"], select, textarea {
+  width: 100%;
+  padding: 10px;
+  margin-top: 5px;
+  margin-bottom: 15px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+/* Capa de protección para pantallas en negro durante captura */
+#blackout-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background-color: black;
+  z-index: 999999;
+}

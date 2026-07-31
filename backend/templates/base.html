@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Solemne Neurociencias y Neuropsicología - UDP</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
+</head>
+<body>
+  <div id="blackout-overlay"></div>
+  <header>
+    <div class="logo-header">
+      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo Neurociencias UDP">
+      <span class="brand-title">Solemne Neurociencias y Neuropsicología</span>
+    </div>
+    <div>
+      <a href="/" class="btn-dark">Inicio</a>
+      <a href="/profesor" class="btn-udp">Panel Profesor</a>
+    </div>
+  </header>
+
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

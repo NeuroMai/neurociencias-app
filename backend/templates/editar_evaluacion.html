@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Editar Evaluación</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light py-4">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Gestión de Preguntas: {{ evaluacion.titulo }}</h2>
+            <a href="/profesor" class="btn btn-outline-dark">Volver al Panel</a>
+        </div>
+
+        <!-- Formulario para Agregar / Editar pregunta -->
+        <div class="card shadow-sm p-4 mb-4" id="form-card">
+            <h4 class="fw-bold mb-3" id="form-title">Agregar Nueva Pregunta</h4>
+            <form action="/profesor/evaluacion/{{ evaluacion.id }}/guardar_pregunta" method="POST" id="form-pregunta">
+                <input type="hidden" name="pregunta_id" id="input-pregunta-id" value="">
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">Sección / Tipo de Pregunta:</label>
+                        <select name="tipo" class="form-select" id="select-tipo" onchange="cambiarTipoInputs(this.value)">
+                            <option value="opcion_multiple">1. Opción Múltiple</option>
+                            <option value="verdadero_falso">2. Verdadero / Falso</option>
+                            <option value="desarrollo">3. Desarrollo Corto</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <label class="form-label">Puntaje:</label>
+                        <input type="number" name="puntaje" id="input-puntaje" class="form-control" value="1" min="0.5" step="0.5">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Enunciado:</label>
+                    <textarea name="enunciado" id="input-enunciado" class="form-control" rows="2" required></textarea>
+                </div>
+
+                <!-- Opciones Múltiples -->
+                <div id="box-opciones">
+                    <div class="row">
+                        <div class="col-md-6 mb-2"><input type="text" name="opcion_a" id="input-op-a" class="form-control" placeholder="Opción A"></div>
+                        <div class="col-md-6 mb-2"><input type="text" name="opcion_b" id="input-op-b" class="form-control" placeholder="Opción B"></div>
+                        <div class="col-md-6 mb-2"><input type="text" name="opcion_c" id="input-op-c" class="form-control" placeholder="Opción C"></div>
+                        <div class="col-md-6 mb-2"><input type="text" name="opcion_d" id="input-op-d" class="form-control" placeholder="Opción D"></div>
+                    </div>
+                    <div class="mb-3 mt-2">
+                        <label class="form-label">Opción Correcta:</label>
+                        <select name="respuesta_correcta" id="select-correcta" class="form-select">
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                            <option value="D">D</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Verdadero / Falso -->
+                <div id="box-vf" style="display: none;">
+                    <div class="mb-3">
+                        <label class="form-label">Respuesta Correcta:</label>
+                        <select name="respuesta_correcta_vf" id="select-correcta-vf" class="form-select" onchange="document.getElementById('select-correcta').value=this.value">
+                            <option value="V">Verdadero</option>
+                            <option value="F">Falso</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-success fw-bold" id="btn-submit">Guardar Pregunta</button>
+                    <button type="button" class="btn btn-secondary" id="btn-cancelar" style="display: none;" onclick="limpiarFormulario()">Cancelar Edición</button>
+                </div>
+            </form>
+        </div>
+
+        <h3 class="fw-bold my-4">Preguntas Configuradas por Secciones</h3>
+
+        <!-- Macro para generar la lista de preguntas -->
+        {% macro render_lista(preguntas, titulo_seccion, border_class, text_class) %}
+        <div class="card shadow-sm p-3 mb-4 {{ border_class }}">
+            <h5 class="fw-bold {{ text_class }}">{{ titulo_seccion }}</h5>
+            {% if preguntas %}
+                <div class="list-group list-group-flush mt-2">
+                {% for p in preguntas %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                        <div>
+                            <strong>{{ loop.index }}. {{ p.enunciado }}</strong> <small class="text-muted">({{ p.puntaje }} pto)</small>
+                        </div>
+                        <div class="d-flex gap-1 align-items-center">
+                            <button type="button" class="btn btn-sm btn-outline-primary" 
+                                onclick="cargarEdicion({{ p | tojson | forceescape }})">✏️ Editar</button>
+                            <form action="/profesor/mover_pregunta/{{ p.id }}/subir" method="POST"><button class="btn btn-sm btn-outline-secondary">⬆️</button></form>
+                            <form action="/profesor/mover_pregunta/{{ p.id }}/bajar" method="POST"><button class="btn btn-sm btn-outline-secondary">⬇️</button></form>
+                            <form action="/profesor/eliminar_pregunta/{{ p.id }}" method="POST" onsubmit="return confirm('¿Eliminar pregunta?');"><button class="btn btn-sm btn-danger">🗑️</button></form>
+                        </div>
+                    </div>
+                {% endfor %}
+                </div>
+            {% else %}
+                <small class="text-muted">Sin preguntas en esta sección.</small>
+            {% endif %}
+        </div>
+        {% endmacro %}
+
+        {{ render_lista(preguntas_om, "Sección 1: Opción Múltiple", "border-primary", "text-primary") }}
+        {{ render_lista(preguntas_vf, "Sección 2: Verdadero / Falso", "border-warning", "text-warning") }}
+        {{ render_lista(preguntas_des, "Sección 3: Desarrollo Corto", "border-info", "text-info") }}
+    </div>
+
+    <script>
+        function cambiarTipoInputs(tipo) {
+            document.getElementById('box-opciones').style.display = (tipo === 'opcion_multiple') ? 'block' : 'none';
+            document.getElementById('box-vf').style.display = (tipo === 'verdadero_falso') ? 'block' : 'none';
+        }
+
+        function cargarEdicion(p) {
+            document.getElementById('form-title').textContent = 'Editar Pregunta';
+            document.getElementById('input-pregunta-id').value = p.id;
+            document.getElementById('select-tipo').value = p.tipo;
+            document.getElementById('input-puntaje').value = p.puntaje;
+            document.getElementById('input-enunciado').value = p.enunciado;
+
+            cambiarTipoInputs(p.tipo);
+
+            if (p.tipo === 'opcion_multiple') {
+                document.getElementById('input-op-a').value = p.opcion_a || '';
+                document.getElementById('input-op-b').value = p.opcion_b || '';
+                document.getElementById('input-op-c').value = p.opcion_c || '';
+                document.getElementById('input-op-d').value = p.opcion_d || '';
+                document.getElementById('select-correcta').value = p.respuesta_correcta || 'A';
+            } else if (p.tipo === 'verdadero_falso') {
+                document.getElementById('select-correcta').value = p.respuesta_correcta || 'V';
+                document.getElementById('select-correcta-vf').value = p.respuesta_correcta || 'V';
+            }
+
+            document.getElementById('btn-submit').textContent = 'Actualizar Pregunta';
+            document.getElementById('btn-cancelar').style.display = 'inline-block';
+
+            document.getElementById('form-card').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function limpiarFormulario() {
+            document.getElementById('form-title').textContent = 'Agregar Nueva Pregunta';
+            document.getElementById('input-pregunta-id').value = '';
+            document.getElementById('form-pregunta').reset();
+            cambiarTipoInputs('opcion_multiple');
+            document.getElementById('btn-submit').textContent = 'Guardar Pregunta';
+            document.getElementById('btn-cancelar').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

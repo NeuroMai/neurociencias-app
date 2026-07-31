@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Rindiendo Evaluación</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        @media print {
+            body { display: none !important; }
+        }
+        
+        /* Disclaimer y Marca de agua para desincentivar capturas */
+        .watermark-disclaimer {
+            user-select: none;
+            -webkit-user-select: none;
+            font-size: 0.85rem;
+            color: #6c757d;
+            border: 1px dashed #dc3545;
+            background-color: #fff8f8;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .logo-final {
+            max-width: 180px;
+            height: auto;
+            margin: 20px auto 10px auto;
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-light py-4">
+
+    <div class="container" style="max-width: 800px;">
+        
+        <!-- Indicador de que la app bloquea screenshots -->
+        <div class="alert alert-danger text-center py-1 mb-2 small" id="screenshot-protection-badge" style="display: none;">
+             Captura de pantalla bloqueada por la aplicación
+        </div>
+        
+        <!-- Header con Temporizador -->
+        <div class="d-flex justify-content-between align-items-center bg-white p-3 rounded shadow-sm mb-3">
+            <div>
+                <h5 class="m-0 fw-bold">{{ evaluacion.titulo }}</h5>
+                <small class="text-muted">Pregunta {{ page }} de {{ total_p }}</small>
+            </div>
+            <div class="bg-danger text-white px-3 py-2 rounded fw-bold fs-5">
+                 <span id="timer">00:00</span>
+            </div>
+        </div>
+
+        <!-- Disclaimer Antifraude Visible -->
+        <div class="watermark-disclaimer">
+             Estudiante: {{ session.get('estudiante_nombre', '') }} ({{ session.get('estudiante_rut', '') }})<br>
+           
+	</div>
+
+        <!-- Tarjeta de Pregunta -->
+        <div class="card shadow-sm p-4 mb-4">
+            <h4 class="mb-3">{{ page }}. {{ pregunta.enunciado }}</h4>
+            <p class="text-muted"><small>Puntaje: {{ pregunta.puntaje }} pto(s)</small></p>
+            <hr>
+
+            {% set resp_actual = respuestas_guardadas.get(pregunta.id|string, '') %}
+
+            {% if pregunta.tipo == 'opcion_multiple' %}
+                {% for opt, txt in [('A', pregunta.opcion_a), ('B', pregunta.opcion_b), ('C', pregunta.opcion_c), ('D', pregunta.opcion_d)] %}
+                    {% if txt %}
+                        <div class="form-check mb-2 fs-5">
+                            <input class="form-check-input" type="radio" name="respuesta" value="{{ opt }}" id="opt_{{ opt }}" {% if resp_actual == opt %}checked{% endif %} onchange="guardarRespuesta('{{ pregunta.id }}', this.value)">
+                            <label class="form-check-label" for="opt_{{ opt }}">{{ opt }}) {{ txt }}</label>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            {% elif pregunta.tipo == 'verdadero_falso' %}
+                <div class="form-check mb-2 fs-5">
+                    <input class="form-check-input" type="radio" name="respuesta" value="V" id="opt_v" {% if resp_actual == 'V' %}checked{% endif %} onchange="guardarRespuesta('{{ pregunta.id }}', this.value)">
+                    <label class="form-check-label" for="opt_v">Verdadero</label>
+                </div>
+                <div class="form-check mb-2 fs-5">
+                    <input class="form-check-input" type="radio" name="respuesta" value="F" id="opt_f" {% if resp_actual == 'F' %}checked{% endif %} onchange="guardarRespuesta('{{ pregunta.id }}', this.value)">
+                    <label class="form-check-label" for="opt_f">Falso</label>
+                </div>
+            {% elif pregunta.tipo == 'desarrollo' %}
+                <textarea class="form-control" rows="4" placeholder="Escribe tu respuesta corta aquí..." onblur="guardarRespuesta('{{ pregunta.id }}', this.value)">{{ resp_actual }}</textarea>
+            {% endif %}
+        </div>
+
+        <!-- Botones de Navegación -->
+        <div class="d-flex justify-content-between align-items-center">
+            {% if page > 1 %}
+                <a href="/estudiante/rendir/{{ evaluacion.id }}?page={{ page - 1 }}" class="btn btn-outline-secondary" onclick="permitirNavegacionInterna()">« Anterior</a>
+            {% else %}
+                <div></div>
+            {% endif %}
+
+            {% if page < total_p %}
+                <a href="/estudiante/rendir/{{ evaluacion.id }}?page={{ page + 1 }}" class="btn btn-primary" onclick="permitirNavegacionInterna()">Siguiente »</a>
+            {% else %}
+                <div class="text-end">
+                    <form action="/estudiante/finalizar/{{ evaluacion.id }}" method="POST" id="form-finalizar" onsubmit="permitirNavegacionInterna(); limpiarTimerStorage();">
+                        <input type="hidden" name="razon_finalizacion" value="Completado Normal">
+                        <button type="submit" class="btn btn-success btn-lg">Entregar Evaluación</button>
+                    </form>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- LOGO SECUNDARIO AL FINAL DE LA PRUEBA -->
+        {% if page == total_p %}
+            <div class="text-center mt-4">
+                <!-- Reemplaza 'logo_secundario.png' por el nombre de tu archivo dentro de static/ -->
+                <img src="{{ url_for('static', filename='logo_secundario.png') }}" alt="Logo Institucional" class="logo-final" onerror="this.style.display='none'">
+            </div>
+        {% endif %}
+
+    </div>
+
+    <script>
+        // Bloqueo de botón Atrás
+        history.pushState(null, null, location.href);
+        window.onpopstate = function () {
+            history.go(1);
+        };
+
+        const evalId = "{{ evaluacion.id }}";
+        const duracionMinutos = {{ evaluacion.duracion_minutos }};
+        let timerKey = 'examen_timer_' + evalId;
+        
+        let navegandoInternamente = false;
+
+        function permitirNavegacionInterna() {
+            navegandoInternamente = true;
+        }
+        
+        let tiempoRestanteSegundos = localStorage.getItem(timerKey);
+        const limiteSegundos = duracionMinutos * 60;
+        
+        if (!tiempoRestanteSegundos || isNaN(tiempoRestanteSegundos) || parseInt(tiempoRestanteSegundos) > limiteSegundos) {
+            tiempoRestanteSegundos = limiteSegundos;
+            localStorage.setItem(timerKey, tiempoRestanteSegundos);
+        }
+
+        const timerDisplay = document.getElementById('timer');
+
+        function formatearTiempo(segundosTotales) {
+            let hrs = Math.floor(segundosTotales / 3600);
+            let mins = Math.floor((segundosTotales % 3600) / 60);
+            let segs = segundosTotales % 60;
+
+            let mStr = mins < 10 ? '0' + mins : mins;
+            let sStr = segs < 10 ? '0' + segs : segs;
+
+            return hrs > 0 ? `${hrs}:${mStr}:${sStr}` : `${mStr}:${sStr}`;
+        }
+
+        function actualizarReloj() {
+            timerDisplay.textContent = formatearTiempo(tiempoRestanteSegundos);
+        }
+
+        actualizarReloj();
+
+        const interval = setInterval(() => {
+            tiempoRestanteSegundos--;
+            localStorage.setItem(timerKey, tiempoRestanteSegundos);
+            actualizarReloj();
+
+            if (tiempoRestanteSegundos <= 0) {
+                clearInterval(interval);
+                alert('El tiempo ha terminado. La prueba se enviará automáticamente.');
+                finalizarPrueba('Tiempo Agotado');
+            }
+        }, 1000);
+
+        function limpiarTimerStorage() {
+            localStorage.removeItem(timerKey);
+        }
+
+        function guardarRespuesta(pId, val) {
+            fetch('/estudiante/guardar_respuesta/' + evalId, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pregunta_id: pId, respuesta: val })
+            });
+        }
+
+        let examenEnviado = false;
+
+        function finalizarPrueba(razon) {
+            if (examenEnviado) return;
+            examenEnviado = true;
+
+            limpiarTimerStorage();
+
+            let form = document.getElementById('form-finalizar');
+            if (!form) {
+                form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/estudiante/finalizar/' + evalId;
+                
+                let inputRazon = document.createElement('input');
+                inputRazon.type = 'hidden';
+                inputRazon.name = 'razon_finalizacion';
+                inputRazon.value = razon;
+                form.appendChild(inputRazon);
+
+                document.body.appendChild(form);
+            } else {
+                let inputRazon = form.querySelector('input[name="razon_finalizacion"]');
+                if (inputRazon) inputRazon.value = razon;
+            }
+
+            form.submit();
+        }
+
+        // 1. Ocultar o cambiar de pestaña / app
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && !navegandoInternamente) {
+                finalizarPrueba('Finalizado por salir de la pestaña o cambiar de aplicación');
+            }
+        });
+
+        // 2. Minimizar ventana o perder foco (Herramientas de captura / Clic fuera de la ventana)
+        window.addEventListener('blur', () => {
+            if (!navegandoInternamente) {
+                finalizarPrueba('Finalizado por minimizar la ventana o perder foco');
+            }
+        });
+
+        // 3. DETECCIÓN DE APP ANDROID NATIVA
+        // Verificar si estamos dentro de la app Android
+        if (typeof Android !== 'undefined' && Android.isScreenshotBlocked) {
+            document.getElementById('screenshot-protection-badge').style.display = 'block';
+            console.log('App Android detectada - Screenshots bloqueados por FLAG_SECURE');
+        }
+
+        // 4. DETECCIÓN DE SCREENSHOT EN WEB (Prevención adicional)
+        // Detectar teclas de screenshot
+        document.addEventListener('keydown', function(e) {
+            // PrintScreen key
+            if (e.key === 'PrintScreen' || e.keyCode === 44) {
+                e.preventDefault();
+                finalizarPrueba('Finalizado por intento de captura de pantalla');
+                return false;
+            }
+            // Mac: Cmd+Shift+3, Cmd+Shift+4, Cmd+Shift+5
+            if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === '3' || e.key === '4' || e.key === '5')) {
+                e.preventDefault();
+                finalizarPrueba('Finalizado por intento de captura de pantalla');
+                return false;
+            }
+        });
+
+        // 5. Prevenir menú contextual (dificulta guardar imágenes)
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>
