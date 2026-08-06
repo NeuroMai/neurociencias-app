@@ -1,9 +1,122 @@
-Evaluaciones Disponibles
-Selecciona tu evaluación e ingresa con el código otorgado por tu docente. ¡Recuerda revisar cuál es tu sección!
-{% if evaluaciones %}
-	•	{% for ev in evaluaciones %}
-	•	{{ ev.titulo }} Sección: {{ ev.seccion }} | Tiempo: {{ ev.duracion_minutos }} min  Rendir 
-	•	{% endfor %} 
-{% else %}
-No hay evaluaciones activas por el momento.
-{% endif %} 
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evaluaciones Disponibles - Neurociencias UDP</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: #f8f9fa;
+            color: #212529;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 2rem 1rem;
+        }
+
+        .header-container {
+            text-align: center;
+            max-width: 600px;
+            margin-bottom: 2rem;
+        }
+
+        .logo {
+            max-width: 180px;
+            height: auto;
+            margin-bottom: 1.5rem;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            font-size: 0.95rem;
+            color: #6c757d;
+            line-height: 1.5;
+        }
+
+        .evaluations-container {
+            width: 100%;
+            max-width: 650px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid #e9ecef;
+        }
+
+        .card-info h2 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #212529;
+            margin-bottom: 0.25rem;
+        }
+
+        .card-info p {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+
+        .btn-rendir {
+            background-color: #d9534f;
+            color: white;
+            padding: 0.5rem 1.25rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: background-color 0.2s ease;
+        }
+
+        .btn-rendir:hover {
+            background-color: #c9302c;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-container">
+        <!-- Logo de la app -->
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo Neurociencias UDP" class="logo">
+        
+        <!-- Título principal -->
+        <h1>Evaluaciones Disponibles</h1>
+        
+        <!-- Texto explicativo editable -->
+        <p class="subtitle">
+            Selecciona tu evaluación e ingresa con el código otorgado por tu docente. ¡Recuerda revisar cuál es tu sección antes de comenzar!
+        </p>
+    </div>
+
+    <div class="evaluations-container">
+        <!-- Tarjeta de Examen -->
+        <div class="card">
+            <div class="card-info">
+                <h2>Solemne 1 Neurociencias</h2>
+                <p>Sección: Sección 1 | Tiempo: 60 min</p>
+            </div>
+            <a href="/examen" class="btn-rendir">Rendir</a>
+        </div>
+    </div>
+
+</body>
+</html>
