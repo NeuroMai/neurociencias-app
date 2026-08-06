@@ -1,0 +1,4 @@
+#Fri Jul 31 16:35:15 CLT 2026
+base.0=/Users/macbookair/Desktop/neurociencias-app/android/app/build/intermediates/dex/debugAndroidTest/mergeProjectDexDebugAndroidTest/0/classes.dex
+path.0=0/classes.dex
+renamed.0=classes.dex

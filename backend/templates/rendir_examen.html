@@ -1,73 +1,36 @@
-{% extends 'base.html' %}
-{% block content %}
-<h2>{{ evaluacion.titulo }} - Sección {{ evaluacion.seccion }}</h2>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rendir Examen - Neurociencias</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
+</head>
+<body>
 
-<form id="examenForm" method="POST">
-  <input type="hidden" name="razon_finalizacion" id="razon_finalizacion" value="Completado Normal">
-
-  <div style="background: #eef; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
-    <h3>Datos del Estudiante</h3>
-    <label>Nombre Completo:</label>
-    <input type="text" name="nombre" required>
-    <label>RUT:</label>
-    <input type="text" name="rut" required>
-    <label>Sección:</label>
-    <select name="seccion" required>
-      <option value="Sección 1">Sección 1</option>
-      <option value="Sección 2">Sección 2</option>
-    </select>
-  </div>
-
-  {% for p in preguntas %}
-    <div class="card-pregunta">
-      <h4>Pregunta {{ loop.index }} ({{ p.puntaje }} pt.)</h4>
-      <p><strong>{{ p.enunciado }}</strong></p>
-
-      {% if p.tipo == 'opcion_multiple' %}
-        <label><input type="radio" name="pregunta_{{ p.id }}" value="A" required> A) {{ p.opcion_a }}</label><br>
-        <label><input type="radio" name="pregunta_{{ p.id }}" value="B"> B) {{ p.opcion_b }}</label><br>
-        <label><input type="radio" name="pregunta_{{ p.id }}" value="C"> C) {{ p.opcion_c }}</label><br>
-        <label><input type="radio" name="pregunta_{{ p.id }}" value="D"> D) {{ p.opcion_d }}</label><br>
-      
-      {% elif p.tipo == 'verdadero_falso' %}
-        <label><input type="radio" name="pregunta_{{ p.id }}" value="V" required> Verdadero</label><br>
-        <label><input type="radio" name="pregunta_{{ p.id }}" value="F"> Falso</label><br>
-      
-      {% elif p.tipo == 'desarrollo' %}
-        <textarea name="pregunta_{{ p.id }}" rows="4" placeholder="Escribe tu respuesta de desarrollo aquí..." required></textarea>
-      {% endif %}
+    <!-- 🔒 MARCA DE AGUA DINÁMICA -->
+    <div class="watermark-container">
+      {% for i in range(16) %}
+        <div class="watermark-item">
+          {{ estudiante.nombre }} — RUT: {{ estudiante.rut }}
+        </div>
+      {% endfor %}
     </div>
-  {% endfor %}
 
-  <button type="submit" class="btn-udp">Enviar Evaluación Finalizada</button>
-</form>
+    <!-- AQUÍ CONTINÚA EL CONTENIDO NORMAL DE TU EXAMEN -->
+    <div class="container">
+        <h1>Evaluación de Neurociencias</h1>
+        
+        <form action="/guardar_examen" method="POST">
+            <div class="pregunta">
+                <p>1. ¿Cuál es la función principal de los neurotransmisores?</p>
+                <label><input type="radio" name="p1" value="a"> Opción A</label><br>
+                <label><input type="radio" name="p1" value="b"> Opción B</label>
+            </div>
+            
+            <button type="submit" class="btn">Enviar Examen</button>
+        </form>
+    </div>
 
-<script>
-  // 1. Detección de cambio de pestaña (Entrega automática por seguridad)
-  document.addEventListener("visibilitychange", function() {
-    if (document.hidden) {
-      document.getElementById('razon_finalizacion').value = "Finalizado Automático (Cambio de pestaña detectado)";
-      alert("Has cambiado de pestaña o minimizado la ventana. La evaluación se ha enviado automáticamente por motivos de seguridad.");
-      document.getElementById('examenForm').submit();
-    }
-  });
-
-  // 2. Anti-pantallazos (Ocultar contenido al presionar PrintScreen o comandos Mac)
-  window.addEventListener("keyup", function(e) {
-    if (e.key === "PrintScreen" || e.keyCode === 44) {
-      activarPantallaNegra();
-    }
-  });
-  window.addEventListener("keydown", function(e) {
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "3" || e.key === "4" || e.key === "5")) {
-      activarPantallaNegra();
-    }
-  });
-
-  function activarPantallaNegra() {
-    let overlay = document.getElementById('blackout-overlay');
-    overlay.style.display = 'block';
-    setTimeout(() => { overlay.style.display = 'none'; }, 3000);
-  }
-</script>
-{% endblock %}
+</body>
+</html>

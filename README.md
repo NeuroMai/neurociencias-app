@@ -19,6 +19,12 @@ neurociencias-app/
 │       ├── java/com/neurociencias/udp/MainActivity.java
 │       ├── res/layout/activity_main.xml
 │       └── AndroidManifest.xml
+├── ios/                   # App iOS nativa
+│   └── NeurocienciasUDP/
+│       ├── NeurocienciasUDPApp.swift
+│       ├── ContentView.swift
+│       ├── Info.plist
+│       └── Assets.xcassets/
 └── README.md
 ```
 
@@ -52,10 +58,53 @@ neurociencias-app/
 - `SECRET_KEY`: Para seguridad de sesiones (si no se define, usa una por defecto)
 - `PORT`: Puerto del servidor (Railway/Render lo asignan automáticamente)
 
-## 📱 PASO 2: Compilar App Android
+## 📱 PASO 2: Compilar App iOS (para iPhone)
 
 ### Requisitos
-- Android Studio instalado (descargar de https://developer.android.com/studio)
+- **Mac** con macOS Monterey o superior
+- **Xcode** (descargar gratis desde la App Store en tu Mac)
+- **Cuenta de Apple** (gratis) para instalar en tu iPhone
+
+### Pasos para crear el proyecto en Xcode
+
+1. **Abre Xcode** en tu Mac
+2. **Crea un nuevo proyecto**: File → New → Project
+3. **Selecciona**: iOS → App → Siguiente
+4. **Configura**:
+   - Product Name: `NeurocienciasUDP`
+   - Team: (tu cuenta de Apple)
+   - Organization Identifier: `com.neurociencias`
+   - Interface: SwiftUI
+   - Language: Swift
+5. **Guarda el proyecto** en `neurociencias-app/ios/`
+6. **Reemplaza los archivos**:
+   - Reemplaza `NeurocienciasUDPApp.swift` con el que está en la carpeta
+   - Reemplaza `ContentView.swift` con el que está en la carpeta
+   - Agrega el `Info.plist` a la configuración del proyecto
+
+### Cambiar la URL del backend
+
+En `ContentView.swift`, busca esta línea y cámbiala por la URL de Railway/Render:
+
+```swift
+private let appURL = "https://neurociencias-udp.up.railway.app"
+```
+
+### Instalar en tu iPhone
+
+1. Conecta tu iPhone a la Mac por USB
+2. En Xcode, selecciona tu iPhone como destino (junto al botón Play)
+3. Haz clic en **Play** (▶️) para compilar e instalar
+4. En tu iPhone, ve a Ajustes → General → VPN y Administración de Dispositivos → Confiar en el desarrollador
+
+### Distribuir a estudiantes (TestFlight)
+
+Para distribuir a otros iPhones necesitas una cuenta de desarrollador de Apple ($99/año) y usar TestFlight.
+
+## 📱 PASO 3: Compilar App Android (opcional)
+
+### Requisitos
+- Android Studio (descargar de https://developer.android.com/studio)
 - Java 17+
 
 ### Pasos
@@ -66,8 +115,6 @@ neurociencias-app/
    ```java
    private static final String APP_URL = "https://TU-URL-DESPLEGADA.railway.app";
    ```
-   Busca esta línea y reemplázala con la URL que te dio Railway o Render.
-
 4. **Conecta tu celular Android** por USB o usa un emulador
 5. **Haz clic en "Run"** (▶️) para compilar e instalar la app
 
@@ -79,16 +126,37 @@ neurociencias-app/
 
 ## 🛡️ Bloqueo de Screenshots
 
-La app Android bloquea screenshots de 3 formas:
+### En iOS (iPhone)
 
-1. **FLAG_SECURE**: Android nativo impide capturar la pantalla (en negro)
-2. **Detección Android 14+**: Detecta el evento de screenshot y finaliza la prueba
-3. **Web**: Detecta teclas PrintScreen/Cmd+Shift+3 y finaliza la prueba
+Apple **NO permite** bloquear screenshots por completo (es una restricción de privacidad del sistema). Pero la app iOS tiene estas protecciones:
 
-Además, la web finaliza la prueba si el estudiante:
-- Cambia de pestaña/aplicación
-- Minimiza la ventana
-- Pierde el foco de la ventana
+#### 1. Detección de screenshot (iOS 14+)
+iOS **detecta automáticamente** cuando se toma un screenshot. Apenas ocurre:
+- Aparece una **pantalla negra** inmediatamente
+- La prueba se **finaliza automáticamente** y se envían las respuestas
+- El estudiante queda bloqueado
+
+#### 2. Marca de agua permanente
+Durante el examen, se muestra una **marca de agua visible** con el texto "CAPTURA DE PANTALLA NO PERMITIDA". Esto significa que **incluso si alguien logra capturar la pantalla**, la imagen tendrá esta advertencia visible.
+
+#### 3. Guided Access (Modo guiado) - RECOMENDADO
+El profesor puede activar **Guided Access** en el iPhone del estudiante antes del examen:
+1. En el iPhone: Ajustes → Accesibilidad → Guided Access → Activar
+2. Abre la app y haz triple clic en el botón lateral
+3. Esto **bloquea la navegación** fuera de la app
+4. El estudiante no puede salir de la app ni cambiar de app
+
+### En Android
+- **FLAG_SECURE**: El screenshot sale NEGRO automáticamente
+- **Detección activa**: Monitorea la carpeta de screenshots
+- **Marca de agua**: Visible durante el examen
+- **Bloqueo de botón Atrás**: No se puede salir
+
+### En Web (ambas plataformas)
+- Detecta teclas PrintScreen / Cmd+Shift+3 y finaliza la prueba
+- Bloquea el menú contextual (clic derecho)
+- Finaliza la prueba si el estudiante cambia de pestaña/aplicación
+- Finaliza la prueba si minimiza la ventana o pierde el foco
 
 ## 🎨 Personalización Estética
 
