@@ -241,10 +241,23 @@ def estudiante_finalizar(eval_id):
         puntaje_total_prueba += p['puntaje']
         es_correcta = 0
 
-        if p['tipo'] in ['opcion_multiple', 'verdadero_falso']:
+        if p['tipo'] == 'opcion_multiple':
             if resp_estudiante and resp_estudiante.strip().upper() == str(p['respuesta_correcta']).strip().upper():
                 puntaje_obtenido_auto += p['puntaje']
                 es_correcta = 1
+        elif p['tipo'] == 'verdadero_falso':
+            # Normalizar: DB guarda 'A'=Verdadero, '' o 'B'=Falso
+            # Estudiante envía 'V' o 'F'
+            resp_correcta = str(p['respuesta_correcta'] or '').strip().upper()
+            resp_estudiante_norm = resp_estudiante.strip().upper() if resp_estudiante else ''
+            if resp_correcta == 'A':  # Verdadero
+                if resp_estudiante_norm == 'V':
+                    puntaje_obtenido_auto += p['puntaje']
+                    es_correcta = 1
+            else:  # Falso (B, vacío, etc.)
+                if resp_estudiante_norm == 'F':
+                    puntaje_obtenido_auto += p['puntaje']
+                    es_correcta = 1
         elif p['tipo'] == 'desarrollo':
             cursor.execute('''
                 INSERT INTO respuestas_desarrollo (intento_id, pregunta_id, respuesta_texto)
@@ -443,13 +456,38 @@ def ver_prueba_estudiante(intento_id):
         return redirect(url_for('profesor_panel'))
     
     # Obtener preguntas de la evaluación con las respuestas del estudiante
-    preguntas = conn.execute('''
+    # Ordenar por segmento: opcion_multiple, verdadero_falso, desarrollo
+    # Y dentro de cada segmento, por orden ASC
+    preguntas_om = conn.execute('''
         SELECT p.*, re.respuesta as respuesta_estudiante, re.es_correcta
         FROM preguntas p
         LEFT JOIN respuestas_estudiante re ON re.pregunta_id = p.id AND re.intento_id = ?
-        WHERE p.evaluacion_id = ?
+        WHERE p.evaluacion_id = ? AND p.tipo = 'opcion_multiple'
         ORDER BY p.orden ASC, p.id ASC
     ''', (intento_id, intento['evaluacion_id'])).fetchall()
+    
+    preguntas_vf = conn.execute('''
+        SELECT p.*, re.respuesta as respuesta_estudiante, re.es_correcta
+        FROM preguntas p
+        LEFT JOIN respuestas_estudiante re ON re.pregunta_id = p.id AND re.intento_id = ?
+        WHERE p.evaluacion_id = ? AND p.tipo = 'verdadero_falso'
+        ORDER BY p.orden ASC, p.id ASC
+    ''', (intento_id, intento['evaluacion_id'])).fetchall()
+    
+    preguntas_des = conn.execute('''
+        SELECT p.*, re.respuesta as respuesta_estudiante, re.es_correcta
+        FROM preguntas p
+        LEFT JOIN respuestas_estudiante re ON re.pregunta_id = p.id AND re.intento_id = ?
+        WHERE p.evaluacion_id = ? AND p.tipo = 'desarrollo'
+        ORDER BY p.orden ASC, p.id ASC
+    ''', (intento_id, intento['evaluacion_id'])).fetchall()
+    
+    # Organizar en segmentos claros
+    segmentos = [
+        ('opcion_multiple', 'Selección Múltiple', preguntas_om),
+        ('verdadero_falso', 'Verdadero o Falso', preguntas_vf),
+        ('desarrollo', 'Desarrollo', preguntas_des),
+    ]
     
     # Obtener puntajes de desarrollo
     respuestas_desarrollo = conn.execute('''
@@ -464,7 +502,7 @@ def ver_prueba_estudiante(intento_id):
     
     return render_template('ver_prueba_estudiante.html', 
                            intento=intento, 
-                           preguntas=preguntas,
+                           segmentos=segmentos,
                            puntaje_desarrollo_map=puntaje_desarrollo_map)
 
 # Health check endpoint for deployment

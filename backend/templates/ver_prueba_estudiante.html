@@ -13,10 +13,13 @@
         .header-bg { background-color: #212529; color: white; }
         .pregunta-card { margin-bottom: 1.5rem; border-radius: 8px; overflow: hidden; }
         .respuesta-alumno { background: white; padding: 12px; border-radius: 6px; border: 1px solid #dee2e6; white-space: pre-wrap; }
-        .respuesta-correcta { background: #e8f5e9; padding: 8px 12px; border-radius: 4px; margin-top: 8px; }
+        .opcion-item { padding: 8px 12px; border-radius: 4px; margin: 4px 0; border: 1px solid #e9ecef; background: #fff; }
+        .opcion-correcta { background-color: #d4edda; border-color: #28a745; }
+        .opcion-incorrecta { background-color: #f8d7da; border-color: #dc3545; }
         .badge-correcta { background-color: #28a745; color: white; }
         .badge-incorrecta { background-color: #dc3545; color: white; }
         .badge-pendiente { background-color: #ffc107; color: #212529; }
+        .segmento-header { background-color: #212529; color: white; padding: 10px 15px; border-radius: 6px; margin-bottom: 1.5rem; }
     </style>
 </head>
 <body>
@@ -42,7 +45,7 @@
                         <strong>Evaluación:</strong> {{ intento.evaluacion_titulo }}
                     </div>
                     <div class="col-md-3">
-                        <strong>Puntaje:</strong> 
+                        <strong>Puntaje Total:</strong> 
                         <span class="badge {% if (intento.puntaje_autocorregido + (intento.puntaje_desarrollo or 0)) >= (intento.puntaje_total_auto / 2) %}badge-correcta{% else %}badge-incorrecta{% endif %}">
                             {{ intento.puntaje_autocorregido + (intento.puntaje_desarrollo or 0) }} / {{ intento.puntaje_total_auto + (intento.puntaje_desarrollo or 0) }}
                         </span>
@@ -62,104 +65,106 @@
             </div>
         </div>
 
-        <h4 class="fw-bold mb-3">Preguntas del Examen</h4>
+        {% for tipo, titulo_segmento, lista_preguntas in segmentos %}
+            {% if lista_preguntas %}
+                <div class="segmento-header">
+                    <h4 class="m-0 fw-bold">{{ titulo_segmento }} ({{ lista_preguntas|length }})</h4>
+                </div>
 
-        {% for p in preguntas %}
-        <div class="card pregunta-card shadow-sm 
-            {% if p.tipo in ['opcion_multiple', 'verdadero_falso'] and p.respuesta_estudiante %}
-                {% if p.es_correcta %}correcta{% else %}incorrecta{% endif %}
-            {% elif p.tipo == 'desarrollo' %}
-                desarrollo
-            {% endif %}">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start">
-                    <h6 class="fw-bold mb-2">
-                        Pregunta {{ loop.index }} 
-                        <span class="badge 
-                            {% if p.tipo == 'opcion_multiple' %}bg-primary
-                            {% elif p.tipo == 'verdadero_falso' %}bg-info
-                            {% else %}bg-warning text-dark{% endif %}">
-                            {{ p.tipo.replace('_', ' ').title() }}
-                        </span>
-                        <span class="badge bg-secondary">{{ p.puntaje }} pt{% if p.puntaje != 1 %}s{% endif %}</span>
-                    </h6>
-                    <div>
-                        {% if p.tipo in ['opcion_multiple', 'verdadero_falso'] %}
-                            {% if p.respuesta_estudiante %}
-                                <span class="badge {% if p.es_correcta %}badge-correcta{% else %}badge-incorrecta{% endif %}">
-                                    {% if p.es_correcta %}✅ Correcta{% else %}❌ Incorrecta{% endif %}
-                                </span>
-                            {% else %}
-                                <span class="badge badge-pendiente">⚠️ Sin responder</span>
-                            {% endif %}
-                        {% else %}
-                            <span class="badge badge-pendiente">📝 Pendiente de calificar</span>
+                {% for p in lista_preguntas %}
+                <div class="card pregunta-card shadow-sm 
+                    {% if tipo in ['opcion_multiple', 'verdadero_falso'] and p.respuesta_estudiante %}
+                        {% if p.es_correcta %}correcta{% else %}incorrecta{% endif %}
+                    {% elif tipo == 'desarrollo' %}
+                        desarrollo
+                    {% endif %}">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <h6 class="fw-bold mb-2">
+                                Pregunta {{ loop.index }}
+                                <span class="badge bg-secondary">{{ p.puntaje }} pt{% if p.puntaje != 1 %}s{% endif %}</span>
+                            </h6>
+                            <div>
+                                {% if tipo in ['opcion_multiple', 'verdadero_falso'] %}
+                                    {% if p.respuesta_estudiante %}
+                                        <span class="badge {% if p.es_correcta %}badge-correcta{% else %}badge-incorrecta{% endif %}">
+                                            {% if p.es_correcta %}✅ Correcta{% else %}❌ Incorrecta{% endif %}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge-pendiente">⚠️ Sin responder</span>
+                                    {% endif %}
+                                {% else %}
+                                    {% if p.id in puntaje_desarrollo_map and puntaje_desarrollo_map[p.id] is not none %}
+                                        <span class="badge {% if puntaje_desarrollo_map[p.id] > 0 %}badge-correcta{% else %}badge-incorrecta{% endif %}">
+                                            {{ puntaje_desarrollo_map[p.id] }}/{{ p.puntaje }} pts
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge-pendiente">📝 Pendiente</span>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <p class="mb-2">{{ p.enunciado }}</p>
+
+                        {% if tipo == 'opcion_multiple' %}
+                            {% set opciones = [('A', p.opcion_a), ('B', p.opcion_b), ('C', p.opcion_c), ('D', p.opcion_d)] %}
+                            {% for letra, texto in opciones %}
+                                {% if texto %}
+                                    <div class="opcion-item 
+                                        {% if p.respuesta_correcta and letra|upper == p.respuesta_correcta|upper %}
+                                            opcion-correcta
+                                        {% elif p.respuesta_estudiante and letra|upper == p.respuesta_estudiante|upper and p.respuesta_estudiante|upper != p.respuesta_correcta|upper %}
+                                            opcion-incorrecta
+                                        {% endif %}">
+                                        <strong>{{ letra }})</strong> {{ texto }}
+                                        {% if p.respuesta_correcta and letra|upper == p.respuesta_correcta|upper %}
+                                            <span class="text-success fw-bold">✓ (Correcta)</span>
+                                        {% endif %}
+                                        {% if p.respuesta_estudiante and letra|upper == p.respuesta_estudiante|upper and p.respuesta_estudiante|upper != p.respuesta_correcta|upper %}
+                                            <span class="text-danger fw-bold">✗ (Seleccionada)</span>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        {% elif tipo == 'verdadero_falso' %}
+                            {% set resp_correcta_vf = (p.respuesta_correcta or '').strip().upper() %}
+                            {% set resp_est_vf = (p.respuesta_estudiante or '').strip().upper() %}
+                            {% set correcta_vf = resp_correcta_vf == 'A' %}
+                            <div class="opcion-item {% if correcta_vf %}opcion-correcta{% elif resp_est_vf == 'V' and not correcta_vf %}opcion-incorrecta{% endif %}">
+                                Verdadero
+                                {% if correcta_vf %}<span class="text-success fw-bold">✓ (Correcta)</span>{% endif %}
+                                {% if resp_est_vf == 'V' and not correcta_vf %}<span class="text-danger fw-bold">✗ (Seleccionada)</span>{% endif %}
+                            </div>
+                            <div class="opcion-item {% if not correcta_vf %}opcion-correcta{% elif resp_est_vf == 'F' and correcta_vf %}opcion-incorrecta{% endif %}">
+                                Falso
+                                {% if not correcta_vf %}<span class="text-success fw-bold">✓ (Correcta)</span>{% endif %}
+                                {% if resp_est_vf == 'F' and correcta_vf %}<span class="text-danger fw-bold">✗ (Seleccionada)</span>{% endif %}
+                            </div>
+                        {% endif %}
+
+                        {% if tipo == 'desarrollo' %}
+                            <div class="respuesta-alumno mt-2">
+                                <strong>Respuesta del alumno:</strong><br>
+                                {% if p.respuesta_estudiante %}
+                                    {{ p.respuesta_estudiante }}
+                                {% else %}
+                                    <em class="text-muted">Sin respuesta</em>
+                                {% endif %}
+                            </div>
+                            <div class="mt-2">
+                                <strong>Puntaje asignado:</strong> 
+                                {% if p.id in puntaje_desarrollo_map and puntaje_desarrollo_map[p.id] is not none %}
+                                    {{ puntaje_desarrollo_map[p.id] }} / {{ p.puntaje }} pts
+                                {% else %}
+                                    <em class="text-muted">Aún no calificado</em>
+                                {% endif %}
+                            </div>
                         {% endif %}
                     </div>
                 </div>
-
-                <p class="mb-2">{{ p.enunciado }}</p>
-
-                {% if p.tipo == 'opcion_multiple' %}
-                    <div class="mb-2">
-                        {% set letras = {'a': p.opcion_a, 'b': p.opcion_b, 'c': p.opcion_c, 'd': p.opcion_d} %}
-                        {% for letra, texto in letras.items() if texto %}
-                            <div class="{% if p.respuesta_correcta and letra|upper == p.respuesta_correcta|upper %}respuesta-correcta{% endif %} 
-                                        {% if p.respuesta_estudiante and letra|upper == p.respuesta_estudiante|upper and p.respuesta_estudiante|upper != p.respuesta_correcta|upper %}bg-danger bg-opacity-10{% endif %}
-                                        px-2 py-1 rounded" style="margin: 2px 0;">
-                                <strong>{{ letra|upper }})</strong> {{ texto }}
-                                {% if p.respuesta_correcta and letra|upper == p.respuesta_correcta|upper %}
-                                    <span class="text-success">✓</span>
-                                {% endif %}
-                                {% if p.respuesta_estudiante and letra|upper == p.respuesta_estudiante|upper %}
-                                    <span class="{% if p.es_correcta %}text-success{% else %}text-danger{% endif %} fw-bold">← Respuesta del alumno</span>
-                                {% endif %}
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% elif p.tipo == 'verdadero_falso' %}
-                    <div class="mb-2">
-                        {% for opcion in ['Verdadero', 'Falso'] %}
-                            <div class="{% if p.respuesta_correcta and opcion[0]|upper == p.respuesta_correcta|upper %}respuesta-correcta{% endif %}
-                                        {% if p.respuesta_estudiante and opcion[0]|upper == p.respuesta_estudiante|upper and p.respuesta_estudiante|upper != p.respuesta_correcta|upper %}bg-danger bg-opacity-10{% endif %}
-                                        px-2 py-1 rounded" style="margin: 2px 0;">
-                                {{ opcion }}
-                                {% if p.respuesta_correcta and opcion[0]|upper == p.respuesta_correcta|upper %}
-                                    <span class="text-success">✓</span>
-                                {% endif %}
-                                {% if p.respuesta_estudiante and opcion[0]|upper == p.respuesta_estudiante|upper %}
-                                    <span class="{% if p.es_correcta %}text-success{% else %}text-danger{% endif %} fw-bold">← Respuesta del alumno</span>
-                                {% endif %}
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-
-                <div class="respuesta-alumno mt-2">
-                    <strong>Respuesta del alumno:</strong><br>
-                    {% if p.respuesta_estudiante %}
-                        {% if p.tipo == 'desarrollo' %}
-                            {{ p.respuesta_estudiante }}
-                        {% else %}
-                            <strong>{{ p.respuesta_estudiante }}</strong>
-                        {% endif %}
-                    {% else %}
-                        <em class="text-muted">Sin respuesta</em>
-                    {% endif %}
-                </div>
-
-                {% if p.tipo == 'desarrollo' %}
-                    <div class="mt-2">
-                        <strong>Puntaje asignado:</strong> 
-                        {% if p.id in puntaje_desarrollo_map and puntaje_desarrollo_map[p.id] is not none %}
-                            {{ puntaje_desarrollo_map[p.id] }} / {{ p.puntaje }} pts
-                        {% else %}
-                            <em class="text-muted">Aún no calificado</em>
-                        {% endif %}
-                    </div>
-                {% endif %}
-            </div>
-        </div>
+                {% endfor %}
+            {% endif %}
         {% endfor %}
 
         <div class="text-center mt-3 mb-4">
