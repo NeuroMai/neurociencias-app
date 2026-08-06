@@ -81,6 +81,17 @@ def init_db():
                 FOREIGN KEY (pregunta_id) REFERENCES preguntas (id) ON DELETE CASCADE
             )
         ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS respuestas_estudiante (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                intento_id INTEGER,
+                pregunta_id INTEGER,
+                respuesta TEXT DEFAULT '',
+                es_correcta INTEGER DEFAULT 0,
+                FOREIGN KEY (intento_id) REFERENCES intentos (id) ON DELETE CASCADE,
+                FOREIGN KEY (pregunta_id) REFERENCES preguntas (id) ON DELETE CASCADE
+            )
+        ''')
         conn.commit()
 
 init_db()
@@ -228,15 +239,23 @@ def estudiante_finalizar(eval_id):
         p_id = str(p['id'])
         resp_estudiante = respuestas.get(p_id, '')
         puntaje_total_prueba += p['puntaje']
+        es_correcta = 0
 
         if p['tipo'] in ['opcion_multiple', 'verdadero_falso']:
             if resp_estudiante and resp_estudiante.strip().upper() == str(p['respuesta_correcta']).strip().upper():
                 puntaje_obtenido_auto += p['puntaje']
+                es_correcta = 1
         elif p['tipo'] == 'desarrollo':
             cursor.execute('''
                 INSERT INTO respuestas_desarrollo (intento_id, pregunta_id, respuesta_texto)
                 VALUES (?, ?, ?)
             ''', (intento_id, p['id'], resp_estudiante))
+
+        # Guardar todas las respuestas en respuestas_estudiante
+        cursor.execute('''
+            INSERT INTO respuestas_estudiante (intento_id, pregunta_id, respuesta, es_correcta)
+            VALUES (?, ?, ?, ?)
+        ''', (intento_id, p['id'], resp_estudiante, es_correcta))
 
     cursor.execute('''
         UPDATE intentos 
@@ -410,6 +429,43 @@ def revisar_desarrollo(intento_id):
     ''', (intento_id,)).fetchall()
 
     return render_template('revisar_desarrollo.html', intento=intento, respuestas=respuestas)
+
+@app.route('/profesor/ver_prueba/<int:intento_id>')
+def ver_prueba_estudiante(intento_id):
+    conn = get_db()
+    
+    intento = conn.execute('''
+        SELECT i.*, e.titulo as evaluacion_titulo, e.seccion as evaluacion_seccion
+        FROM intentos i JOIN evaluaciones e ON i.evaluacion_id = e.id WHERE i.id = ?
+    ''', (intento_id,)).fetchone()
+    
+    if not intento:
+        return redirect(url_for('profesor_panel'))
+    
+    # Obtener preguntas de la evaluación con las respuestas del estudiante
+    preguntas = conn.execute('''
+        SELECT p.*, re.respuesta as respuesta_estudiante, re.es_correcta
+        FROM preguntas p
+        LEFT JOIN respuestas_estudiante re ON re.pregunta_id = p.id AND re.intento_id = ?
+        WHERE p.evaluacion_id = ?
+        ORDER BY p.orden ASC, p.id ASC
+    ''', (intento_id, intento['evaluacion_id'])).fetchall()
+    
+    # Obtener puntajes de desarrollo
+    respuestas_desarrollo = conn.execute('''
+        SELECT rd.pregunta_id, rd.puntaje_asignado
+        FROM respuestas_desarrollo rd
+        WHERE rd.intento_id = ?
+    ''', (intento_id,)).fetchall()
+    
+    puntaje_desarrollo_map = {}
+    for rd in respuestas_desarrollo:
+        puntaje_desarrollo_map[rd['pregunta_id']] = rd['puntaje_asignado']
+    
+    return render_template('ver_prueba_estudiante.html', 
+                           intento=intento, 
+                           preguntas=preguntas,
+                           puntaje_desarrollo_map=puntaje_desarrollo_map)
 
 # Health check endpoint for deployment
 @app.route('/health')
