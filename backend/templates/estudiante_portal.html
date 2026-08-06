@@ -108,14 +108,19 @@
     </div>
 
     <div class="evaluations-container">
-        <!-- Tarjeta de Examen -->
-        <div class="card">
-            <div class="card-info">
-                <h2>Solemne 1 Neurociencias</h2>
-                <p>Sección: Sección 1 | Tiempo: 60 min</p>
+        {% if evaluaciones %}
+            {% for eval in evaluaciones %}
+            <div class="card">
+                <div class="card-info">
+                    <h2>{{ eval['titulo'] }}</h2>
+                    <p>Sección: {{ eval['seccion'] }} | Tiempo: {{ eval['duracion_minutos'] }} min</p>
+                </div>
+                <a href="{{ url_for('estudiante_ingreso', eval_id=eval['id']) }}" class="btn-rendir">Rendir</a>
             </div>
-            <a href="/examen" class="btn-rendir">Rendir</a>
-        </div>
+            {% endfor %}
+        {% else %}
+            <p style="text-align:center; color:#6c757d; padding:2rem 0;">No hay evaluaciones disponibles en este momento.</p>
+        {% endif %}
     </div>
 
 </body>
