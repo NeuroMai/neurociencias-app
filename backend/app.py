@@ -2,7 +2,8 @@ import os
 import random
 import string
 import sqlite3
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, make_response
+import sys
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 
 base_dir = os.path.abspath(os.path.dirname(__file__))
 template_dir = os.path.join(base_dir, 'templates')
@@ -11,20 +12,60 @@ static_dir = os.path.join(base_dir, 'static')
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 app.secret_key = os.environ.get('SECRET_KEY', 'neurociencias_udp_secret_key_2026_v5')
 
-# Database path - use environment variable or default to project directory
-DATABASE = os.environ.get('DATABASE_URL', os.path.join(base_dir, 'database.db'))
+# --- Database configuration ---
+# Supports SQLite (local) and PostgreSQL (Heroku/production)
+DATABASE_URL = os.environ.get('DATABASE_URL', os.path.join(base_dir, 'database.db'))
+DB_IS_POSTGRES = DATABASE_URL.startswith('postgres://') or DATABASE_URL.startswith('postgresql://')
 
-# If DATABASE_URL is a SQLite path (not a URL), use it directly
-# If it's a postgres:// URL, we'd need to adapt, but for simplicity we keep SQLite
-if DATABASE.startswith('sqlite:///'):
-    DATABASE = DATABASE.replace('sqlite:///', '')
-elif DATABASE.startswith('sqlite://'):
-    DATABASE = DATABASE.replace('sqlite://', '')
+if DATABASE_URL.startswith('sqlite:///'):
+    DATABASE_PATH = DATABASE_URL.replace('sqlite:///', '')
+elif DATABASE_URL.startswith('sqlite://'):
+    DATABASE_PATH = DATABASE_URL.replace('sqlite://', '')
+else:
+    DATABASE_PATH = DATABASE_URL
 
 def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if DB_IS_POSTGRES:
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        conn = psycopg2.connect(DATABASE_PATH)
+        conn.cursor_factory = RealDictCursor
+        return conn
+    else:
+        conn = sqlite3.connect(DATABASE_PATH)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
+
+def db_execute(conn, sql, params=None):
+    """Execute a query and return the cursor. Converts ? to %s for PostgreSQL."""
+    if DB_IS_POSTGRES:
+        sql = sql.replace('?', '%s')
+    cursor = conn.cursor()
+    if params:
+        cursor.execute(sql, params)
+    else:
+        cursor.execute(sql)
+    return cursor
+
+def db_execute_insert(conn, sql, params=None):
+    """Execute INSERT and return the new row id using RETURNING for PostgreSQL."""
+    if DB_IS_POSTGRES:
+        sql = sql.replace('?', '%s')
+        cursor = conn.cursor()
+        if params:
+            cursor.execute(sql + ' RETURNING id', params)
+        else:
+            cursor.execute(sql + ' RETURNING id')
+        result = cursor.fetchone()
+        return result['id'] if result else None
+    else:
+        cursor = conn.cursor()
+        if params:
+            cursor.execute(sql, params)
+        else:
+            cursor.execute(sql)
+        return cursor.lastrowid
 
 def generar_codigo_acceso():
     caracteres = string.ascii_uppercase + string.digits
@@ -32,8 +73,8 @@ def generar_codigo_acceso():
 
 def init_db():
     with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
+        # Create tables (IF NOT EXISTS works for both SQLite and PostgreSQL)
+        db_execute(conn, '''
             CREATE TABLE IF NOT EXISTS evaluaciones (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 titulo TEXT NOT NULL,
@@ -42,7 +83,7 @@ def init_db():
                 codigo_acceso TEXT NOT NULL
             )
         ''')
-        cursor.execute('''
+        db_execute(conn, '''
             CREATE TABLE IF NOT EXISTS preguntas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 evaluacion_id INTEGER,
@@ -55,7 +96,7 @@ def init_db():
                 FOREIGN KEY (evaluacion_id) REFERENCES evaluaciones (id) ON DELETE CASCADE
             )
         ''')
-        cursor.execute('''
+        db_execute(conn, '''
             CREATE TABLE IF NOT EXISTS intentos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 evaluacion_id INTEGER,
@@ -66,11 +107,12 @@ def init_db():
                 puntaje_desarrollo REAL DEFAULT 0,
                 puntaje_total_auto REAL DEFAULT 0,
                 estado TEXT DEFAULT 'Completado',
+                estado_revision TEXT DEFAULT 'sin_desarrollo',
                 fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (evaluacion_id) REFERENCES evaluaciones (id) ON DELETE CASCADE
             )
         ''')
-        cursor.execute('''
+        db_execute(conn, '''
             CREATE TABLE IF NOT EXISTS respuestas_desarrollo (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 intento_id INTEGER,
@@ -81,7 +123,7 @@ def init_db():
                 FOREIGN KEY (pregunta_id) REFERENCES preguntas (id) ON DELETE CASCADE
             )
         ''')
-        cursor.execute('''
+        db_execute(conn, '''
             CREATE TABLE IF NOT EXISTS respuestas_estudiante (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 intento_id INTEGER,
@@ -92,6 +134,14 @@ def init_db():
                 FOREIGN KEY (pregunta_id) REFERENCES preguntas (id) ON DELETE CASCADE
             )
         ''')
+        # Add estado_revision column if it doesn't exist (for databases created before this migration)
+        try:
+            if DB_IS_POSTGRES:
+                db_execute(conn, "ALTER TABLE intentos ADD COLUMN IF NOT EXISTS estado_revision TEXT DEFAULT 'sin_desarrollo'")
+            else:
+                db_execute(conn, "ALTER TABLE intentos ADD COLUMN estado_revision TEXT DEFAULT 'sin_desarrollo'")
+        except Exception:
+            pass  # Column already exists
         conn.commit()
 
 init_db()
@@ -113,13 +163,13 @@ def index():
 @app.route('/estudiante')
 def estudiante_portal():
     conn = get_db()
-    evaluaciones = conn.execute('SELECT * FROM evaluaciones').fetchall()
+    evaluaciones = db_execute(conn, 'SELECT * FROM evaluaciones').fetchall()
     return render_template('estudiante_portal.html', evaluaciones=evaluaciones)
 
 @app.route('/estudiante/ingreso/<int:eval_id>', methods=['GET', 'POST'])
 def estudiante_ingreso(eval_id):
     conn = get_db()
-    evaluacion = conn.execute('SELECT * FROM evaluaciones WHERE id = ?', (eval_id,)).fetchone()
+    evaluacion = db_execute(conn, 'SELECT * FROM evaluaciones WHERE id = ?', (eval_id,)).fetchone()
     if not evaluacion:
         return redirect(url_for('estudiante_portal'))
 
@@ -143,8 +193,8 @@ def estudiante_disclosure(eval_id):
         return redirect(url_for('estudiante_portal'))
 
     conn = get_db()
-    evaluacion = conn.execute('SELECT * FROM evaluaciones WHERE id = ?', (eval_id,)).fetchone()
-    preguntas = conn.execute('SELECT * FROM preguntas WHERE evaluacion_id = ?', (eval_id,)).fetchall()
+    evaluacion = db_execute(conn, 'SELECT * FROM evaluaciones WHERE id = ?', (eval_id,)).fetchone()
+    preguntas = db_execute(conn, 'SELECT * FROM preguntas WHERE evaluacion_id = ?', (eval_id,)).fetchall()
     
     total_preguntas = len(preguntas)
     cant_opcion_multiple = sum(1 for p in preguntas if p['tipo'] == 'opcion_multiple')
@@ -160,18 +210,18 @@ def estudiante_disclosure(eval_id):
 
 @app.route('/estudiante/rendir/<int:eval_id>')
 def estudiante_rendir(eval_id):
-    # SI NO TIENE ACCESO AUTORIZADO (O YA FINALIZÓ), REDIRIGIR AL PORTAL
+    # SI NO TIENE ACCESO AUTORIZADO, REDIRIGIR AL PORTAL
     if not session.get(f'acceso_autorizado_{eval_id}'):
         return redirect(url_for('estudiante_portal'))
 
     conn = get_db()
-    evaluacion = conn.execute('SELECT * FROM evaluaciones WHERE id = ?', (eval_id,)).fetchone()
+    evaluacion = db_execute(conn, 'SELECT * FROM evaluaciones WHERE id = ?', (eval_id,)).fetchone()
     
     session_key = f'orden_preguntas_{eval_id}'
     if session_key not in session:
-        om = [dict(p) for p in conn.execute("SELECT * FROM preguntas WHERE evaluacion_id = ? AND tipo = 'opcion_multiple' ORDER BY orden ASC, id ASC", (eval_id,)).fetchall()]
-        vf = [dict(p) for p in conn.execute("SELECT * FROM preguntas WHERE evaluacion_id = ? AND tipo = 'verdadero_falso' ORDER BY orden ASC, id ASC", (eval_id,)).fetchall()]
-        des = [dict(p) for p in conn.execute("SELECT * FROM preguntas WHERE evaluacion_id = ? AND tipo = 'desarrollo' ORDER BY orden ASC, id ASC", (eval_id,)).fetchall()]
+        om = [dict(p) for p in db_execute(conn, "SELECT * FROM preguntas WHERE evaluacion_id = ? AND tipo = 'opcion_multiple' ORDER BY orden ASC, id ASC", (eval_id,)).fetchall()]
+        vf = [dict(p) for p in db_execute(conn, "SELECT * FROM preguntas WHERE evaluacion_id = ? AND tipo = 'verdadero_falso' ORDER BY orden ASC, id ASC", (eval_id,)).fetchall()]
+        des = [dict(p) for p in db_execute(conn, "SELECT * FROM preguntas WHERE evaluacion_id = ? AND tipo = 'desarrollo' ORDER BY orden ASC, id ASC", (eval_id,)).fetchall()]
         
         random.shuffle(om)
         random.shuffle(vf)
@@ -179,7 +229,23 @@ def estudiante_rendir(eval_id):
         
         preguntas_ordenadas = om + vf + des
         session[session_key] = preguntas_ordenadas
-        session[f'respuestas_{eval_id}'] = {}
+
+        # Crear el intento en la base de datos al iniciar la prueba
+        nombre = session.get('estudiante_nombre', 'Estudiante Desconocido')
+        rut = session.get('estudiante_rut', 'Sin RUT')
+        seccion = session.get('estudiante_seccion', 'Sin Sección')
+        
+        # Determinar estado_revision inicial
+        tiene_desarrollo = any(p['tipo'] == 'desarrollo' for p in preguntas_ordenadas)
+        estado_revision = 'pendiente' if tiene_desarrollo else 'sin_desarrollo'
+        
+        intento_id = db_execute_insert(conn, '''
+            INSERT INTO intentos (evaluacion_id, estudiante_nombre, estudiante_rut, seccion, estado, estado_revision)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (eval_id, nombre, rut, seccion, 'En Progreso', estado_revision))
+        conn.commit()
+        
+        session[f'intento_id_{eval_id}'] = intento_id
 
     preguntas_ordenadas = session[session_key]
     total_p = len(preguntas_ordenadas)
@@ -189,7 +255,14 @@ def estudiante_rendir(eval_id):
         page = 1
         
     pregunta_actual = preguntas_ordenadas[page - 1] if total_p > 0 else None
-    respuestas_guardadas = session.get(f'respuestas_{eval_id}', {})
+    
+    # Obtener respuestas guardadas desde la base de datos
+    intento_id = session.get(f'intento_id_{eval_id}')
+    respuestas_guardadas = {}
+    if intento_id:
+        saved = db_execute(conn, 'SELECT pregunta_id, respuesta FROM respuestas_estudiante WHERE intento_id = ?', (intento_id,)).fetchall()
+        for r in saved:
+            respuestas_guardadas[str(r['pregunta_id'])] = r['respuesta']
 
     return render_template('estudiante_examen_page.html', 
                            evaluacion=evaluacion, 
@@ -204,40 +277,41 @@ def guardar_respuesta(eval_id):
         return jsonify({'status': 'unauthorized'}), 403
 
     data = request.json
-    p_id = str(data.get('pregunta_id'))
-    resp = data.get('respuesta')
+    p_id = data.get('pregunta_id')
+    resp = data.get('respuesta', '')
+    intento_id = session.get(f'intento_id_{eval_id}')
     
-    respuestas_key = f'respuestas_{eval_id}'
-    respuestas = session.get(respuestas_key, {})
-    respuestas[p_id] = resp
-    session[respuestas_key] = respuestas
-    session.modified = True
+    if not intento_id:
+        return jsonify({'status': 'error', 'message': 'No hay intento activo'}), 400
+
+    conn = get_db()
+    # Eliminar respuesta previa y reinsertar (funciona en SQLite y PostgreSQL)
+    db_execute(conn, 'DELETE FROM respuestas_estudiante WHERE intento_id = ? AND pregunta_id = ?', (intento_id, p_id))
+    db_execute(conn, 'INSERT INTO respuestas_estudiante (intento_id, pregunta_id, respuesta) VALUES (?, ?, ?)', (intento_id, p_id, resp))
+    conn.commit()
     return jsonify({'status': 'ok'})
 
 @app.route('/estudiante/finalizar/<int:eval_id>', methods=['POST'])
 def estudiante_finalizar(eval_id):
     conn = get_db()
-    nombre = session.get('estudiante_nombre', 'Estudiante Desconocido')
-    rut = session.get('estudiante_rut', 'Sin RUT')
-    seccion = session.get('estudiante_seccion', 'Sin Sección')
+    intento_id = session.get(f'intento_id_{eval_id}')
     razon = request.form.get('razon_finalizacion', 'Completado Normal')
     
-    respuestas = session.get(f'respuestas_{eval_id}', {})
-    preguntas = conn.execute('SELECT * FROM preguntas WHERE evaluacion_id = ?', (eval_id,)).fetchall()
+    if not intento_id:
+        return redirect(url_for('estudiante_portal'))
+    
+    preguntas = db_execute(conn, 'SELECT * FROM preguntas WHERE evaluacion_id = ?', (eval_id,)).fetchall()
 
     puntaje_obtenido_auto = 0
     puntaje_total_prueba = 0
-
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO intentos (evaluacion_id, estudiante_nombre, estudiante_rut, seccion, estado)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (eval_id, nombre, rut, seccion, razon))
-    intento_id = cursor.lastrowid
+    tiene_desarrollo = False
 
     for p in preguntas:
-        p_id = str(p['id'])
-        resp_estudiante = respuestas.get(p_id, '')
+        p_id = p['id']
+        # Obtener respuesta del estudiante desde la base de datos
+        re = db_execute(conn, 'SELECT respuesta FROM respuestas_estudiante WHERE intento_id = ? AND pregunta_id = ?', (intento_id, p_id)).fetchone()
+        resp_estudiante = re['respuesta'] if re else ''
+        
         puntaje_total_prueba += p['puntaje']
         es_correcta = 0
 
@@ -246,8 +320,6 @@ def estudiante_finalizar(eval_id):
                 puntaje_obtenido_auto += p['puntaje']
                 es_correcta = 1
         elif p['tipo'] == 'verdadero_falso':
-            # Normalizar: DB guarda 'A'=Verdadero, '' o 'B'=Falso
-            # Estudiante envía 'V' o 'F'
             resp_correcta = str(p['respuesta_correcta'] or '').strip().upper()
             resp_estudiante_norm = resp_estudiante.strip().upper() if resp_estudiante else ''
             if resp_correcta == 'A':  # Verdadero
@@ -259,35 +331,37 @@ def estudiante_finalizar(eval_id):
                     puntaje_obtenido_auto += p['puntaje']
                     es_correcta = 1
         elif p['tipo'] == 'desarrollo':
-            cursor.execute('''
+            tiene_desarrollo = True
+            # Insertar en respuestas_desarrollo para su revisión manual
+            db_execute(conn, '''
                 INSERT INTO respuestas_desarrollo (intento_id, pregunta_id, respuesta_texto)
                 VALUES (?, ?, ?)
-            ''', (intento_id, p['id'], resp_estudiante))
+            ''', (intento_id, p_id, resp_estudiante))
 
-        # Guardar todas las respuestas en respuestas_estudiante
-        cursor.execute('''
-            INSERT INTO respuestas_estudiante (intento_id, pregunta_id, respuesta, es_correcta)
-            VALUES (?, ?, ?, ?)
-        ''', (intento_id, p['id'], resp_estudiante, es_correcta))
+        # Actualizar es_correcta en respuestas_estudiante
+        db_execute(conn, 'UPDATE respuestas_estudiante SET es_correcta = ? WHERE intento_id = ? AND pregunta_id = ?', (es_correcta, intento_id, p_id))
 
-    cursor.execute('''
+    # Determinar estado_revision
+    estado_revision = 'pendiente' if tiene_desarrollo else 'sin_desarrollo'
+
+    db_execute(conn, '''
         UPDATE intentos 
-        SET puntaje_autocorregido = ?, puntaje_total_auto = ?
+        SET puntaje_autocorregido = ?, puntaje_total_auto = ?, estado = ?, estado_revision = ?
         WHERE id = ?
-    ''', (puntaje_obtenido_auto, puntaje_total_prueba, intento_id))
+    ''', (puntaje_obtenido_auto, puntaje_total_prueba, razon, estado_revision, intento_id))
     conn.commit()
 
     # DESTRUIR LAS SESIONES PARA BLOQUEAR REINGRESO
     session.pop(f'orden_preguntas_{eval_id}', None)
-    session.pop(f'respuestas_{eval_id}', None)
     session.pop(f'acceso_autorizado_{eval_id}', None)
+    session.pop(f'intento_id_{eval_id}', None)
 
     return redirect(url_for('resultado_estudiante', intento_id=intento_id))
 
 @app.route('/estudiante/resultado/<int:intento_id>')
 def resultado_estudiante(intento_id):
     conn = get_db()
-    intento = conn.execute('SELECT * FROM intentos WHERE id = ?', (intento_id,)).fetchone()
+    intento = db_execute(conn, 'SELECT * FROM intentos WHERE id = ?', (intento_id,)).fetchone()
     if not intento:
         return redirect(url_for('index'))
     return render_template('resultado_estudiante.html', intento=intento)
@@ -297,13 +371,29 @@ def resultado_estudiante(intento_id):
 @app.route('/profesor')
 def profesor_panel():
     conn = get_db()
-    evaluaciones = conn.execute('SELECT * FROM evaluaciones').fetchall()
-    intentos = conn.execute('''
-        SELECT i.*, e.titulo as evaluacion_titulo 
-        FROM intentos i JOIN evaluaciones e ON i.evaluacion_id = e.id 
-        ORDER BY i.fecha DESC
-    ''').fetchall()
-    return render_template('profesor_panel.html', evaluaciones=evaluaciones, intentos=intentos)
+    evaluaciones = db_execute(conn, 'SELECT * FROM evaluaciones').fetchall()
+    
+    # Para cada evaluación, contar intentos y estado de revisión
+    evaluaciones_con_info = []
+    for ev in evaluaciones:
+        total_intentos = db_execute(conn, 'SELECT COUNT(*) as cnt FROM intentos WHERE evaluacion_id = ?', (ev['id'],)).fetchone()['cnt']
+        completados = db_execute(conn, "SELECT COUNT(*) as cnt FROM intentos WHERE evaluacion_id = ? AND estado_revision = 'completado'", (ev['id'],)).fetchone()['cnt']
+        pendientes = db_execute(conn, "SELECT COUNT(*) as cnt FROM intentos WHERE evaluacion_id = ? AND estado_revision = 'pendiente'", (ev['id'],)).fetchone()['cnt']
+        sin_desarrollo = db_execute(conn, "SELECT COUNT(*) as cnt FROM intentos WHERE evaluacion_id = ? AND estado_revision = 'sin_desarrollo'", (ev['id'],)).fetchone()['cnt']
+        
+        evaluaciones_con_info.append({
+            'id': ev['id'],
+            'titulo': ev['titulo'],
+            'seccion': ev['seccion'],
+            'duracion_minutos': ev['duracion_minutos'],
+            'codigo_acceso': ev['codigo_acceso'],
+            'total_intentos': total_intentos,
+            'completados': completados,
+            'pendientes': pendientes,
+            'sin_desarrollo': sin_desarrollo
+        })
+    
+    return render_template('profesor_panel.html', evaluaciones=evaluaciones_con_info)
 
 @app.route('/profesor/crear_evaluacion', methods=['POST'])
 def crear_evaluacion():
@@ -313,7 +403,7 @@ def crear_evaluacion():
     codigo = generar_codigo_acceso()
     
     conn = get_db()
-    conn.execute('''
+    db_execute(conn, '''
         INSERT INTO evaluaciones (titulo, seccion, duracion_minutos, codigo_acceso) 
         VALUES (?, ?, ?, ?)
     ''', (titulo, seccion, duracion, codigo))
@@ -323,18 +413,18 @@ def crear_evaluacion():
 @app.route('/profesor/eliminar_evaluacion/<int:eval_id>', methods=['POST'])
 def eliminar_evaluacion(eval_id):
     conn = get_db()
-    conn.execute('DELETE FROM evaluaciones WHERE id = ?', (eval_id,))
+    db_execute(conn, 'DELETE FROM evaluaciones WHERE id = ?', (eval_id,))
     conn.commit()
     return redirect(url_for('profesor_panel'))
 
 @app.route('/profesor/evaluacion/<int:eval_id>')
 def editar_evaluacion(eval_id):
     conn = get_db()
-    evaluacion = conn.execute('SELECT * FROM evaluaciones WHERE id = ?', (eval_id,)).fetchone()
+    evaluacion = db_execute(conn, 'SELECT * FROM evaluaciones WHERE id = ?', (eval_id,)).fetchone()
     
-    preguntas_om = [dict(p) for p in conn.execute("SELECT * FROM preguntas WHERE evaluacion_id = ? AND tipo = 'opcion_multiple' ORDER BY orden ASC, id ASC", (eval_id,)).fetchall()]
-    preguntas_vf = [dict(p) for p in conn.execute("SELECT * FROM preguntas WHERE evaluacion_id = ? AND tipo = 'verdadero_falso' ORDER BY orden ASC, id ASC", (eval_id,)).fetchall()]
-    preguntas_des = [dict(p) for p in conn.execute("SELECT * FROM preguntas WHERE evaluacion_id = ? AND tipo = 'desarrollo' ORDER BY orden ASC, id ASC", (eval_id,)).fetchall()]
+    preguntas_om = [dict(p) for p in db_execute(conn, "SELECT * FROM preguntas WHERE evaluacion_id = ? AND tipo = 'opcion_multiple' ORDER BY orden ASC, id ASC", (eval_id,)).fetchall()]
+    preguntas_vf = [dict(p) for p in db_execute(conn, "SELECT * FROM preguntas WHERE evaluacion_id = ? AND tipo = 'verdadero_falso' ORDER BY orden ASC, id ASC", (eval_id,)).fetchall()]
+    preguntas_des = [dict(p) for p in db_execute(conn, "SELECT * FROM preguntas WHERE evaluacion_id = ? AND tipo = 'desarrollo' ORDER BY orden ASC, id ASC", (eval_id,)).fetchall()]
 
     return render_template('editar_evaluacion.html', 
                            evaluacion=evaluacion, 
@@ -356,15 +446,15 @@ def guardar_pregunta(eval_id):
 
     conn = get_db()
     if pregunta_id:
-        conn.execute('''
+        db_execute(conn, '''
             UPDATE preguntas 
             SET tipo = ?, enunciado = ?, opcion_a = ?, opcion_b = ?, opcion_c = ?, opcion_d = ?, respuesta_correcta = ?, puntaje = ?
             WHERE id = ?
         ''', (tipo, enunciado, op_a, op_b, op_c, op_d, resp_correcta, puntaje, pregunta_id))
     else:
-        max_orden = conn.execute('SELECT MAX(orden) as max_o FROM preguntas WHERE evaluacion_id = ? AND tipo = ?', (eval_id, tipo)).fetchone()['max_o']
+        max_orden = db_execute(conn, 'SELECT MAX(orden) as max_o FROM preguntas WHERE evaluacion_id = ? AND tipo = ?', (eval_id, tipo)).fetchone()['max_o']
         nuevo_orden = (max_orden + 1) if max_orden is not None else 1
-        conn.execute('''
+        db_execute(conn, '''
             INSERT INTO preguntas (evaluacion_id, tipo, enunciado, opcion_a, opcion_b, opcion_c, opcion_d, respuesta_correcta, puntaje, orden)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (eval_id, tipo, enunciado, op_a, op_b, op_c, op_d, resp_correcta, puntaje, nuevo_orden))
@@ -375,10 +465,10 @@ def guardar_pregunta(eval_id):
 @app.route('/profesor/eliminar_pregunta/<int:pregunta_id>', methods=['POST'])
 def eliminar_pregunta(pregunta_id):
     conn = get_db()
-    pregunta = conn.execute('SELECT evaluacion_id FROM preguntas WHERE id = ?', (pregunta_id,)).fetchone()
+    pregunta = db_execute(conn, 'SELECT evaluacion_id FROM preguntas WHERE id = ?', (pregunta_id,)).fetchone()
     eval_id = pregunta['evaluacion_id'] if pregunta else None
     
-    conn.execute('DELETE FROM preguntas WHERE id = ?', (pregunta_id,))
+    db_execute(conn, 'DELETE FROM preguntas WHERE id = ?', (pregunta_id,))
     conn.commit()
     if eval_id:
         return redirect(url_for('editar_evaluacion', eval_id=eval_id))
@@ -387,7 +477,7 @@ def eliminar_pregunta(pregunta_id):
 @app.route('/profesor/mover_pregunta/<int:pregunta_id>/<direccion>', methods=['POST'])
 def mover_pregunta(pregunta_id, direccion):
     conn = get_db()
-    p_actual = conn.execute('SELECT * FROM preguntas WHERE id = ?', (pregunta_id,)).fetchone()
+    p_actual = db_execute(conn, 'SELECT * FROM preguntas WHERE id = ?', (pregunta_id,)).fetchone()
     if not p_actual:
         return redirect(url_for('profesor_panel'))
 
@@ -396,24 +486,44 @@ def mover_pregunta(pregunta_id, direccion):
     orden_actual = p_actual['orden']
 
     if direccion == 'subir':
-        p_vecina = conn.execute('''
+        p_vecina = db_execute(conn, '''
             SELECT * FROM preguntas 
             WHERE evaluacion_id = ? AND tipo = ? AND orden < ? 
             ORDER BY orden DESC LIMIT 1
         ''', (eval_id, tipo, orden_actual)).fetchone()
     else:
-        p_vecina = conn.execute('''
+        p_vecina = db_execute(conn, '''
             SELECT * FROM preguntas 
             WHERE evaluacion_id = ? AND tipo = ? AND orden > ? 
             ORDER BY orden ASC LIMIT 1
         ''', (eval_id, tipo, orden_actual)).fetchone()
 
     if p_vecina:
-        conn.execute('UPDATE preguntas SET orden = ? WHERE id = ?', (p_vecina['orden'], p_actual['id']))
-        conn.execute('UPDATE preguntas SET orden = ? WHERE id = ?', (orden_actual, p_vecina['id']))
+        db_execute(conn, 'UPDATE preguntas SET orden = ? WHERE id = ?', (p_vecina['orden'], p_actual['id']))
+        db_execute(conn, 'UPDATE preguntas SET orden = ? WHERE id = ?', (orden_actual, p_vecina['id']))
         conn.commit()
 
     return redirect(url_for('editar_evaluacion', eval_id=eval_id))
+
+# --- RUTA PARA VER INTENTOS DE UNA EVALUACIÓN ESPECÍFICA (CARPETA) ---
+
+@app.route('/profesor/evaluacion/<int:eval_id>/intentos')
+def intentos_evaluacion(eval_id):
+    conn = get_db()
+    evaluacion = db_execute(conn, 'SELECT * FROM evaluaciones WHERE id = ?', (eval_id,)).fetchone()
+    if not evaluacion:
+        return redirect(url_for('profesor_panel'))
+    
+    intentos = db_execute(conn, '''
+        SELECT i.*, e.titulo as evaluacion_titulo
+        FROM intentos i JOIN evaluaciones e ON i.evaluacion_id = e.id
+        WHERE i.evaluacion_id = ?
+        ORDER BY i.fecha DESC
+    ''', (eval_id,)).fetchall()
+    
+    return render_template('intentos_evaluacion.html', evaluacion=evaluacion, intentos=intentos)
+
+# --- RUTAS DE REVISIÓN ---
 
 @app.route('/profesor/revisar/<int:intento_id>', methods=['GET', 'POST'])
 def revisar_desarrollo(intento_id):
@@ -424,18 +534,31 @@ def revisar_desarrollo(intento_id):
             if key.startswith('puntaje_'):
                 resp_id = key.split('_')[1]
                 pts = float(value) if value else 0
-                conn.execute('UPDATE respuestas_desarrollo SET puntaje_asignado = ? WHERE id = ?', (pts, resp_id))
+                db_execute(conn, 'UPDATE respuestas_desarrollo SET puntaje_asignado = ? WHERE id = ?', (pts, resp_id))
                 puntaje_total_desarrollo += pts
         
-        conn.execute('UPDATE intentos SET puntaje_desarrollo = ? WHERE id = ?', (puntaje_total_desarrollo, intento_id))
+        db_execute(conn, 'UPDATE intentos SET puntaje_desarrollo = ? WHERE id = ?', (puntaje_total_desarrollo, intento_id))
+        
+        # Verificar si todas las preguntas de desarrollo están calificadas
+        sin_calificar = db_execute(conn, '''
+            SELECT COUNT(*) as cnt FROM respuestas_desarrollo 
+            WHERE intento_id = ? AND puntaje_asignado IS NULL
+        ''', (intento_id,)).fetchone()['cnt']
+        
+        if sin_calificar == 0:
+            # Todas calificadas → marcar como completado
+            db_execute(conn, "UPDATE intentos SET estado_revision = 'completado' WHERE id = ?", (intento_id,))
+        else:
+            db_execute(conn, "UPDATE intentos SET estado_revision = 'pendiente' WHERE id = ?", (intento_id,))
+        
         conn.commit()
         return redirect(url_for('profesor_panel'))
 
-    intento = conn.execute('''
+    intento = db_execute(conn, '''
         SELECT i.*, e.titulo FROM intentos i JOIN evaluaciones e ON i.evaluacion_id = e.id WHERE i.id = ?
     ''', (intento_id,)).fetchone()
     
-    respuestas = conn.execute('''
+    respuestas = db_execute(conn, '''
         SELECT rd.*, p.enunciado, p.puntaje as puntaje_maximo 
         FROM respuestas_desarrollo rd JOIN preguntas p ON rd.pregunta_id = p.id 
         WHERE rd.intento_id = ?
@@ -447,7 +570,7 @@ def revisar_desarrollo(intento_id):
 def ver_prueba_estudiante(intento_id):
     conn = get_db()
     
-    intento = conn.execute('''
+    intento = db_execute(conn, '''
         SELECT i.*, e.titulo as evaluacion_titulo, e.seccion as evaluacion_seccion
         FROM intentos i JOIN evaluaciones e ON i.evaluacion_id = e.id WHERE i.id = ?
     ''', (intento_id,)).fetchone()
@@ -456,9 +579,7 @@ def ver_prueba_estudiante(intento_id):
         return redirect(url_for('profesor_panel'))
     
     # Obtener preguntas de la evaluación con las respuestas del estudiante
-    # Ordenar por segmento: opcion_multiple, verdadero_falso, desarrollo
-    # Y dentro de cada segmento, por orden ASC
-    preguntas_om = conn.execute('''
+    preguntas_om = db_execute(conn, '''
         SELECT p.*, re.respuesta as respuesta_estudiante, re.es_correcta
         FROM preguntas p
         LEFT JOIN respuestas_estudiante re ON re.pregunta_id = p.id AND re.intento_id = ?
@@ -466,7 +587,7 @@ def ver_prueba_estudiante(intento_id):
         ORDER BY p.orden ASC, p.id ASC
     ''', (intento_id, intento['evaluacion_id'])).fetchall()
     
-    preguntas_vf = conn.execute('''
+    preguntas_vf = db_execute(conn, '''
         SELECT p.*, re.respuesta as respuesta_estudiante, re.es_correcta
         FROM preguntas p
         LEFT JOIN respuestas_estudiante re ON re.pregunta_id = p.id AND re.intento_id = ?
@@ -474,7 +595,7 @@ def ver_prueba_estudiante(intento_id):
         ORDER BY p.orden ASC, p.id ASC
     ''', (intento_id, intento['evaluacion_id'])).fetchall()
     
-    preguntas_des = conn.execute('''
+    preguntas_des = db_execute(conn, '''
         SELECT p.*, re.respuesta as respuesta_estudiante, re.es_correcta
         FROM preguntas p
         LEFT JOIN respuestas_estudiante re ON re.pregunta_id = p.id AND re.intento_id = ?
@@ -482,7 +603,7 @@ def ver_prueba_estudiante(intento_id):
         ORDER BY p.orden ASC, p.id ASC
     ''', (intento_id, intento['evaluacion_id'])).fetchall()
     
-    # Organizar en segmentos claros
+    # Organizar en segmentos
     segmentos = [
         ('opcion_multiple', 'Selección Múltiple', preguntas_om),
         ('verdadero_falso', 'Verdadero o Falso', preguntas_vf),
@@ -490,7 +611,7 @@ def ver_prueba_estudiante(intento_id):
     ]
     
     # Obtener puntajes de desarrollo
-    respuestas_desarrollo = conn.execute('''
+    respuestas_desarrollo = db_execute(conn, '''
         SELECT rd.pregunta_id, rd.puntaje_asignado
         FROM respuestas_desarrollo rd
         WHERE rd.intento_id = ?

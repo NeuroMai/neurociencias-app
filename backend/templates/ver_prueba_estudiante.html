@@ -20,13 +20,16 @@
         .badge-incorrecta { background-color: #dc3545; color: white; }
         .badge-pendiente { background-color: #ffc107; color: #212529; }
         .segmento-header { background-color: #212529; color: white; padding: 10px 15px; border-radius: 6px; margin-bottom: 1.5rem; }
+        .estado-completado { color: #28a745; font-weight: 600; }
+        .estado-pendiente { color: #ffc107; font-weight: 600; }
+        .estado-sin-desarrollo { color: #6c757d; font-weight: 600; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="d-flex justify-content-between align-items-center p-3 rounded header-bg mb-4">
-            <h2 class="m-0 fw-bold">📝 Prueba de {{ intento.estudiante_nombre }}</h2>
-            <a href="/profesor" class="btn btn-outline-light btn-sm">← Volver al Panel</a>
+            <h2 class="m-0 fw-bold">Prueba de {{ intento.estudiante_nombre }}</h2>
+            <a href="/profesor" class="btn btn-outline-light btn-sm">&larr; Volver al Panel</a>
         </div>
 
         <div class="card shadow-sm mb-4">
@@ -53,12 +56,22 @@
                 </div>
                 <div class="row mt-2">
                     <div class="col-md-6">
-                        <small class="text-muted">📅 {{ intento.fecha }} | Estado: {{ intento.estado }}</small>
+                        <small class="text-muted">&#128197; {{ intento.fecha }} | Estado: {{ intento.estado }}</small>
                     </div>
                     <div class="col-md-6 text-end">
                         <span class="badge badge-correcta">Autocorregido: {{ intento.puntaje_autocorregido }}/{{ intento.puntaje_total_auto }}</span>
                         <span class="badge {% if intento.puntaje_desarrollo %}badge-correcta{% else %}badge-pendiente{% endif %}">
                             Desarrollo: {{ intento.puntaje_desarrollo or 0 }} pts
+                        </span>
+                        &nbsp;
+                        <span class="estado-revision-label">
+                            {% if intento.estado_revision == 'completado' %}
+                                <span class="estado-completado">Completada</span>
+                            {% elif intento.estado_revision == 'pendiente' %}
+                                <span class="estado-pendiente">Pendiente</span>
+                            {% else %}
+                                <span class="estado-sin-desarrollo">Sin desarrollo</span>
+                            {% endif %}
                         </span>
                     </div>
                 </div>
@@ -88,18 +101,19 @@
                                 {% if tipo in ['opcion_multiple', 'verdadero_falso'] %}
                                     {% if p.respuesta_estudiante %}
                                         <span class="badge {% if p.es_correcta %}badge-correcta{% else %}badge-incorrecta{% endif %}">
-                                            {% if p.es_correcta %}✅ Correcta{% else %}❌ Incorrecta{% endif %}
+                                            {% if p.es_correcta %}Correcta{% else %}Incorrecta{% endif %}
                                         </span>
                                     {% else %}
-                                        <span class="badge badge-pendiente">⚠️ Sin responder</span>
+                                        <span class="badge badge-pendiente">Sin responder</span>
                                     {% endif %}
                                 {% else %}
                                     {% if p.id in puntaje_desarrollo_map and puntaje_desarrollo_map[p.id] is not none %}
-                                        <span class="badge {% if puntaje_desarrollo_map[p.id] > 0 %}badge-correcta{% else %}badge-incorrecta{% endif %}">
+                                        <span class="badge badge-correcta">
                                             {{ puntaje_desarrollo_map[p.id] }}/{{ p.puntaje }} pts
                                         </span>
+                                        <span class="estado-completado ms-1">Calificada</span>
                                     {% else %}
-                                        <span class="badge badge-pendiente">📝 Pendiente</span>
+                                        <span class="badge badge-pendiente">Pendiente</span>
                                     {% endif %}
                                 {% endif %}
                             </div>
@@ -119,10 +133,10 @@
                                         {% endif %}">
                                         <strong>{{ letra }})</strong> {{ texto }}
                                         {% if p.respuesta_correcta and letra|upper == p.respuesta_correcta|upper %}
-                                            <span class="text-success fw-bold">✓ (Correcta)</span>
+                                            <span class="text-success fw-bold">&#10003; (Correcta)</span>
                                         {% endif %}
-                                        {% if p.respuesta_estudiante and letra|upper == p.respuesta_estudiante|upper and p.respuesta_estudiante|upper != p.respuesta_correcta|upper %}
-                                            <span class="text-danger fw-bold">✗ (Seleccionada)</span>
+                                        {% if p.respuesta_estudiante and letra|upper == p.respuesta_estudiante|upper %}
+                                            <span class="text-danger fw-bold">&#10007; (Seleccionada)</span>
                                         {% endif %}
                                     </div>
                                 {% endif %}
@@ -133,13 +147,13 @@
                             {% set correcta_vf = resp_correcta_vf == 'A' %}
                             <div class="opcion-item {% if correcta_vf %}opcion-correcta{% elif resp_est_vf == 'V' and not correcta_vf %}opcion-incorrecta{% endif %}">
                                 Verdadero
-                                {% if correcta_vf %}<span class="text-success fw-bold">✓ (Correcta)</span>{% endif %}
-                                {% if resp_est_vf == 'V' and not correcta_vf %}<span class="text-danger fw-bold">✗ (Seleccionada)</span>{% endif %}
+                                {% if correcta_vf %}<span class="text-success fw-bold">&#10003; (Correcta)</span>{% endif %}
+                                {% if resp_est_vf == 'V' %}<span class="text-danger fw-bold">&#10007; (Seleccionada)</span>{% endif %}
                             </div>
                             <div class="opcion-item {% if not correcta_vf %}opcion-correcta{% elif resp_est_vf == 'F' and correcta_vf %}opcion-incorrecta{% endif %}">
                                 Falso
-                                {% if not correcta_vf %}<span class="text-success fw-bold">✓ (Correcta)</span>{% endif %}
-                                {% if resp_est_vf == 'F' and correcta_vf %}<span class="text-danger fw-bold">✗ (Seleccionada)</span>{% endif %}
+                                {% if not correcta_vf %}<span class="text-success fw-bold">&#10003; (Correcta)</span>{% endif %}
+                                {% if resp_est_vf == 'F' %}<span class="text-danger fw-bold">&#10007; (Seleccionada)</span>{% endif %}
                             </div>
                         {% endif %}
 
@@ -156,8 +170,10 @@
                                 <strong>Puntaje asignado:</strong> 
                                 {% if p.id in puntaje_desarrollo_map and puntaje_desarrollo_map[p.id] is not none %}
                                     {{ puntaje_desarrollo_map[p.id] }} / {{ p.puntaje }} pts
+                                    &nbsp;<span class="estado-completado">Calificada</span>
                                 {% else %}
                                     <em class="text-muted">Aún no calificado</em>
+                                    &nbsp;<span class="estado-pendiente">Pendiente</span>
                                 {% endif %}
                             </div>
                         {% endif %}
@@ -168,7 +184,7 @@
         {% endfor %}
 
         <div class="text-center mt-3 mb-4">
-            <a href="/profesor" class="btn btn-dark">← Volver al Panel Docente</a>
+            <a href="/profesor" class="btn btn-dark">&larr; Volver al Panel Docente</a>
         </div>
     </div>
 </body>
