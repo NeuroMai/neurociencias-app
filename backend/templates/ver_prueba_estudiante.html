@@ -50,7 +50,7 @@
                     <div class="col-md-3">
                         <strong>Puntaje Total:</strong> 
                         <span class="badge {% if (intento.puntaje_autocorregido + (intento.puntaje_desarrollo or 0)) >= (intento.puntaje_total_auto / 2) %}badge-correcta{% else %}badge-incorrecta{% endif %}">
-                            {{ intento.puntaje_autocorregido + (intento.puntaje_desarrollo or 0) }} / {{ intento.puntaje_total_auto + (intento.puntaje_desarrollo or 0) }}
+                            {{ intento.puntaje_autocorregido + (intento.puntaje_desarrollo or 0) }} / {{ intento.puntaje_total_auto }}
                         </span>
                     </div>
                 </div>
