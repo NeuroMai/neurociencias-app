@@ -232,20 +232,29 @@ def estudiante_rendir(eval_id):
         preguntas_ordenadas = om + vf + des
         session[session_key] = preguntas_ordenadas
 
-        # Crear el intento en la base de datos al iniciar la prueba
         nombre = session.get('estudiante_nombre', 'Estudiante Desconocido')
         rut = session.get('estudiante_rut', 'Sin RUT')
         seccion = session.get('estudiante_seccion', 'Sin Sección')
         
-        # Determinar estado_revision inicial
-        tiene_desarrollo = any(p['tipo'] == 'desarrollo' for p in preguntas_ordenadas)
-        estado_revision = 'pendiente' if tiene_desarrollo else 'sin_desarrollo'
+        # Verificar si ya existe un intento activo (En Progreso) para este estudiante + evaluación
+        intento_existente = db_execute(conn, '''
+            SELECT id FROM intentos 
+            WHERE evaluacion_id = ? AND estudiante_rut = ? AND estado = 'En Progreso'
+            LIMIT 1
+        ''', (eval_id, rut)).fetchone()
         
-        intento_id = db_execute_insert(conn, '''
-            INSERT INTO intentos (evaluacion_id, estudiante_nombre, estudiante_rut, seccion, estado, estado_revision)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (eval_id, nombre, rut, seccion, 'En Progreso', estado_revision))
-        conn.commit()
+        if intento_existente:
+            # Reutilizar el intento existente
+            intento_id = intento_existente['id']
+        else:
+            # Crear nuevo intento
+            tiene_desarrollo = any(p['tipo'] == 'desarrollo' for p in preguntas_ordenadas)
+            estado_revision = 'pendiente' if tiene_desarrollo else 'sin_desarrollo'
+            intento_id = db_execute_insert(conn, '''
+                INSERT INTO intentos (evaluacion_id, estudiante_nombre, estudiante_rut, seccion, estado, estado_revision)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (eval_id, nombre, rut, seccion, 'En Progreso', estado_revision))
+            conn.commit()
         
         session[f'intento_id_{eval_id}'] = intento_id
 

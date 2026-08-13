@@ -106,9 +106,6 @@
             <div class="puntaje-box">
                 <div class="label">Respuestas Correctas</div>
                 <div class="valor" id="normal-correctas">0 de 0</div>
-                <hr class="my-2">
-                <div class="label">Puntaje Obtenido</div>
-                <div class="valor" id="normal-puntaje">0 / 0 pts</div>
             </div>
             <p class="text-muted small">Puedes cerrar la página o ventana sin problemas. Tus resultados ya han sido guardados.</p>
             <button type="button" class="btn btn-success" onclick="window.location.href='/estudiante'">Ir al Portal</button>
@@ -126,9 +123,6 @@
             <div class="puntaje-box">
                 <div class="label">Respuestas Correctas hasta el momento</div>
                 <div class="valor" id="infra-correctas">0 de 0</div>
-                <hr class="my-2">
-                <div class="label">Puntaje Obtenido</div>
-                <div class="valor" id="infra-puntaje">0 / 0 pts</div>
             </div>
             <p class="text-muted small">Tus respuestas han sido guardadas y la evaluación ha sido cerrada.</p>
             <button type="button" class="btn btn-danger" onclick="window.location.href='/estudiante'">Ir al Portal</button>
@@ -230,22 +224,20 @@
         // --- VARIABLES DE ESTADO ---
         var examenEnviado = false;
 
-        // Mostrar modal de entrega voluntaria
-        function mostrarModalNormal(obtenido, total, correctas, totalAuto) {
-            document.getElementById('normal-puntaje').textContent = obtenido + ' / ' + total + ' pts';
+        // Mostrar modal de entrega voluntaria (solo formato "X de Y")
+        function mostrarModalNormal(correctas, totalAuto) {
             document.getElementById('normal-correctas').textContent = correctas + ' de ' + totalAuto;
             document.getElementById('modal-normal').classList.add('show');
         }
 
-        // Mostrar modal de infracción
-        function mostrarModalInfraccion(obtenido, total, correctas, totalAuto) {
-            document.getElementById('infra-puntaje').textContent = obtenido + ' / ' + total + ' pts';
+        // Mostrar modal de infracción (solo formato "X de Y")
+        function mostrarModalInfraccion(correctas, totalAuto) {
             document.getElementById('infra-correctas').textContent = correctas + ' de ' + totalAuto;
             document.getElementById('modal-infraccion').classList.add('show');
         }
 
-        // Función única para finalizar la prueba (envía al servidor)
-        function finalizarPrueba(razon, esInfraccion) {
+        // Función única para finalizar la prueba (envía al servidor y espera respuesta)
+        async function finalizarPrueba(razon, esInfraccion) {
             if (examenEnviado) return;
             examenEnviado = true;
             limpiarTimerStorage();
@@ -259,28 +251,29 @@
                 guardarRespuesta(textarea.getAttribute('data-pregunta-id'), textarea.value);
             }
 
-            // Enviar finalización al servidor como JSON
-            fetch('/estudiante/finalizar/' + evalId, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ razon_finalizacion: razon })
-            })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    if (esInfraccion) {
-                        mostrarModalInfraccion(d.puntaje_obtenido, d.puntaje_total, d.preguntas_correctas, d.total_preguntas_auto);
-                    } else {
-                        mostrarModalNormal(d.puntaje_obtenido, d.puntaje_total, d.preguntas_correctas, d.total_preguntas_auto);
-                    }
-                })
-                .catch(function() {
-                    // Fallback: si AJAX falla, mostrar modal con datos locales
-                    if (esInfraccion) {
-                        mostrarModalInfraccion('?', '?', '?', '?');
-                    } else {
-                        mostrarModalNormal('?', '?', '?', '?');
-                    }
+            // Esperar un momento para que las respuestas se guarden
+            await new Promise(function(r) { setTimeout(r, 100); });
+
+            try {
+                var resp = await fetch('/estudiante/finalizar/' + evalId, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ razon_finalizacion: razon })
                 });
+                var d = await resp.json();
+                if (esInfraccion) {
+                    mostrarModalInfraccion(d.preguntas_correctas, d.total_preguntas_auto);
+                } else {
+                    mostrarModalNormal(d.preguntas_correctas, d.total_preguntas_auto);
+                }
+            } catch(err) {
+                // Si AJAX falla, mostrar modal sin datos exactos (pero NUNCA "? de ?")
+                if (esInfraccion) {
+                    mostrarModalInfraccion(0, 0);
+                } else {
+                    mostrarModalNormal(0, 0);
+                }
+            }
         }
 
         // Entregar evaluación voluntariamente (llamado desde el botón)
@@ -291,7 +284,6 @@
 
         // ===== ANTI-TRAMPA =====
         // Solo se activa con visibilitychange (cambio real de pestaña/ventana)
-        // NO usar blur porque se dispara al hacer click en botones
         document.addEventListener('visibilitychange', function() {
             if (document.hidden) {
                 finalizarPrueba('Finalizado por salir de la pestaña o cambiar de aplicación', true);
