@@ -5,6 +5,7 @@ import sqlite3
 import sys
 import csv
 import io
+import json
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 
 base_dir = os.path.abspath(os.path.dirname(__file__))
@@ -110,6 +111,7 @@ def init_db():
                 puntaje_total_auto REAL DEFAULT 0,
                 estado TEXT DEFAULT 'Completado',
                 estado_revision TEXT DEFAULT 'sin_desarrollo',
+                orden_preguntas TEXT DEFAULT NULL,
                 fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (evaluacion_id) REFERENCES evaluaciones (id) ON DELETE CASCADE
             )
@@ -142,6 +144,14 @@ def init_db():
                 db_execute(conn, "ALTER TABLE intentos ADD COLUMN IF NOT EXISTS estado_revision TEXT DEFAULT 'sin_desarrollo'")
             else:
                 db_execute(conn, "ALTER TABLE intentos ADD COLUMN estado_revision TEXT DEFAULT 'sin_desarrollo'")
+        except Exception:
+            pass  # Column already exists
+        # Add orden_preguntas column if it doesn't exist
+        try:
+            if DB_IS_POSTGRES:
+                db_execute(conn, "ALTER TABLE intentos ADD COLUMN IF NOT EXISTS orden_preguntas TEXT DEFAULT NULL")
+            else:
+                db_execute(conn, "ALTER TABLE intentos ADD COLUMN orden_preguntas TEXT DEFAULT NULL")
         except Exception:
             pass  # Column already exists
         conn.commit()
@@ -236,6 +246,10 @@ def estudiante_rendir(eval_id):
         rut = session.get('estudiante_rut', 'Sin RUT')
         seccion = session.get('estudiante_seccion', 'Sin Sección')
         
+        # Extraer solo los IDs de las preguntas en el orden mezclado
+        orden_ids = [p['id'] for p in preguntas_ordenadas]
+        orden_json = json.dumps(orden_ids)
+        
         # Verificar si ya existe un intento activo (En Progreso) para este estudiante + evaluación
         intento_existente = db_execute(conn, '''
             SELECT id FROM intentos 
@@ -244,16 +258,18 @@ def estudiante_rendir(eval_id):
         ''', (eval_id, rut)).fetchone()
         
         if intento_existente:
-            # Reutilizar el intento existente
+            # Reutilizar el intento existente, actualizar el orden
             intento_id = intento_existente['id']
+            db_execute(conn, 'UPDATE intentos SET orden_preguntas = ? WHERE id = ?', (orden_json, intento_id))
+            conn.commit()
         else:
-            # Crear nuevo intento
+            # Crear nuevo intento con el orden guardado
             tiene_desarrollo = any(p['tipo'] == 'desarrollo' for p in preguntas_ordenadas)
             estado_revision = 'pendiente' if tiene_desarrollo else 'sin_desarrollo'
             intento_id = db_execute_insert(conn, '''
-                INSERT INTO intentos (evaluacion_id, estudiante_nombre, estudiante_rut, seccion, estado, estado_revision)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (eval_id, nombre, rut, seccion, 'En Progreso', estado_revision))
+                INSERT INTO intentos (evaluacion_id, estudiante_nombre, estudiante_rut, seccion, estado, estado_revision, orden_preguntas)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (eval_id, nombre, rut, seccion, 'En Progreso', estado_revision, orden_json))
             conn.commit()
         
         session[f'intento_id_{eval_id}'] = intento_id
@@ -636,32 +652,42 @@ def ver_prueba_estudiante(intento_id):
     if not intento:
         return redirect(url_for('profesor_panel'))
     
-    # Obtener preguntas de la evaluación con las respuestas del estudiante
-    preguntas_om = db_execute(conn, '''
+    # Obtener el orden personalizado de preguntas del estudiante
+    orden_preguntas = None
+    if intento['orden_preguntas']:
+        try:
+            orden_preguntas = json.loads(intento['orden_preguntas'])
+        except (json.JSONDecodeError, TypeError):
+            orden_preguntas = None
+    
+    # Obtener todas las preguntas de la evaluación con las respuestas del estudiante
+    # Las ordenamos según el orden personalizado del estudiante si existe
+    todas_preguntas = db_execute(conn, '''
         SELECT p.*, re.respuesta as respuesta_estudiante, re.es_correcta
         FROM preguntas p
         LEFT JOIN respuestas_estudiante re ON re.pregunta_id = p.id AND re.intento_id = ?
-        WHERE p.evaluacion_id = ? AND p.tipo = 'opcion_multiple'
-        ORDER BY p.orden ASC, p.id ASC
+        WHERE p.evaluacion_id = ?
     ''', (intento_id, intento['evaluacion_id'])).fetchall()
     
-    preguntas_vf = db_execute(conn, '''
-        SELECT p.*, re.respuesta as respuesta_estudiante, re.es_correcta
-        FROM preguntas p
-        LEFT JOIN respuestas_estudiante re ON re.pregunta_id = p.id AND re.intento_id = ?
-        WHERE p.evaluacion_id = ? AND p.tipo = 'verdadero_falso'
-        ORDER BY p.orden ASC, p.id ASC
-    ''', (intento_id, intento['evaluacion_id'])).fetchall()
+    # Crear un diccionario para acceso rápido por ID
+    preguntas_dict = {p['id']: dict(p) for p in todas_preguntas}
     
-    preguntas_des = db_execute(conn, '''
-        SELECT p.*, re.respuesta as respuesta_estudiante, re.es_correcta
-        FROM preguntas p
-        LEFT JOIN respuestas_estudiante re ON re.pregunta_id = p.id AND re.intento_id = ?
-        WHERE p.evaluacion_id = ? AND p.tipo = 'desarrollo'
-        ORDER BY p.orden ASC, p.id ASC
-    ''', (intento_id, intento['evaluacion_id'])).fetchall()
+    # Ordenar según el orden personalizado del estudiante
+    if orden_preguntas:
+        preguntas_ordenadas = []
+        for pid in orden_preguntas:
+            if pid in preguntas_dict:
+                preguntas_ordenadas.append(preguntas_dict[pid])
+    else:
+        # Fallback: ordenar por tipo y orden original
+        preguntas_ordenadas = [dict(p) for p in todas_preguntas]
+        preguntas_ordenadas.sort(key=lambda p: (0 if p['tipo'] == 'opcion_multiple' else 1 if p['tipo'] == 'verdadero_falso' else 2, p['orden']))
     
-    # Organizar en segmentos
+    # Organizar en segmentos (por tipo, pero manteniendo el orden del estudiante dentro de cada tipo)
+    preguntas_om = [p for p in preguntas_ordenadas if p['tipo'] == 'opcion_multiple']
+    preguntas_vf = [p for p in preguntas_ordenadas if p['tipo'] == 'verdadero_falso']
+    preguntas_des = [p for p in preguntas_ordenadas if p['tipo'] == 'desarrollo']
+    
     segmentos = [
         ('opcion_multiple', 'Selección Múltiple', preguntas_om),
         ('verdadero_falso', 'Verdadero o Falso', preguntas_vf),
@@ -679,9 +705,11 @@ def ver_prueba_estudiante(intento_id):
     for rd in respuestas_desarrollo:
         puntaje_desarrollo_map[rd['pregunta_id']] = rd['puntaje_asignado']
     
+    # También pasar la lista plana para la plantilla
     return render_template('ver_prueba_estudiante.html', 
                            intento=intento, 
                            segmentos=segmentos,
+                           preguntas_ordenadas=preguntas_ordenadas,
                            puntaje_desarrollo_map=puntaje_desarrollo_map)
 
 # Health check endpoint for deployment
