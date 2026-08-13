@@ -77,12 +77,24 @@
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div>
-                                        <h5 class="fw-bold mb-1">{{ ev.titulo }} <small class="text-muted">({{ ev.seccion }})</small></h5>
+                                        <h5 class="fw-bold mb-1">{{ ev.titulo }} <small class="text-muted">({{ ev.seccion }})</small>
+                                            {% if ev.activa %}
+                                                <span class="badge bg-success ms-1">Activa</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary ms-1">Guardada (No publicada)</span>
+                                            {% endif %}
+                                        </h5>
+>>>>>>>
                                         <small class="text-muted">&#9201; {{ ev.duracion_minutos }} min</small> | 
                                         <span class="badge badge-code px-2 py-1">&#128273; {{ ev.codigo_acceso }}</span>
                                     </div>
                                     <div class="d-flex gap-2">
                                         <a href="/profesor/evaluacion/{{ ev.id }}" class="btn btn-sm btn-outline-dark">Editar Preguntas</a>
+                                        <form action="/profesor/toggle_activa/{{ ev.id }}" method="POST">
+                                            <button type="submit" class="btn btn-sm {% if ev.activa %}btn-outline-warning{% else %}btn-outline-success{% endif %}">
+                                                {% if ev.activa %}Desactivar{% else %}Guardar / Publicar{% endif %}
+                                            </button>
+                                        </form>
                                         <form action="/profesor/eliminar_evaluacion/{{ ev.id }}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar esta evaluación? Perderás todas sus preguntas e intentos.');">
                                             <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button>
                                         </form>

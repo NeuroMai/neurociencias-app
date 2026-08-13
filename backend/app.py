@@ -83,9 +83,18 @@ def init_db():
                 titulo TEXT NOT NULL,
                 seccion TEXT NOT NULL,
                 duracion_minutos INTEGER DEFAULT 60,
-                codigo_acceso TEXT NOT NULL
+                codigo_acceso TEXT NOT NULL,
+                activa INTEGER DEFAULT 1
             )
         ''')
+        # Add activa column if it doesn't exist
+        try:
+            if DB_IS_POSTGRES:
+                db_execute(conn, "ALTER TABLE evaluaciones ADD COLUMN IF NOT EXISTS activa INTEGER DEFAULT 1")
+            else:
+                db_execute(conn, "ALTER TABLE evaluaciones ADD COLUMN activa INTEGER DEFAULT 1")
+        except Exception:
+            pass  # Column already exists
         db_execute(conn, '''
             CREATE TABLE IF NOT EXISTS preguntas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -240,8 +249,9 @@ def estudiante_rendir(eval_id):
         random.shuffle(des)
         
         preguntas_ordenadas = om + vf + des
-        session[session_key] = preguntas_ordenadas
-
+        # Guardar SOLO los IDs en la sesión para evitar duplicados/corrupción
+        session[session_key] = [p['id'] for p in preguntas_ordenadas]
+        
         nombre = session.get('estudiante_nombre', 'Estudiante Desconocido')
         rut = session.get('estudiante_rut', 'Sin RUT')
         seccion = session.get('estudiante_seccion', 'Sin Sección')
@@ -258,12 +268,10 @@ def estudiante_rendir(eval_id):
         ''', (eval_id, rut)).fetchone()
         
         if intento_existente:
-            # Reutilizar el intento existente, actualizar el orden
             intento_id = intento_existente['id']
             db_execute(conn, 'UPDATE intentos SET orden_preguntas = ? WHERE id = ?', (orden_json, intento_id))
             conn.commit()
         else:
-            # Crear nuevo intento con el orden guardado
             tiene_desarrollo = any(p['tipo'] == 'desarrollo' for p in preguntas_ordenadas)
             estado_revision = 'pendiente' if tiene_desarrollo else 'sin_desarrollo'
             intento_id = db_execute_insert(conn, '''
@@ -274,14 +282,18 @@ def estudiante_rendir(eval_id):
         
         session[f'intento_id_{eval_id}'] = intento_id
 
-    preguntas_ordenadas = session[session_key]
-    total_p = len(preguntas_ordenadas)
+    # Recuperar los IDs de la sesión y cargar las preguntas desde la DB
+    orden_ids = session[session_key]
+    total_p = len(orden_ids)
     
     page = request.args.get('page', 1, type=int)
     if page < 1 or page > total_p:
         page = 1
         
-    pregunta_actual = preguntas_ordenadas[page - 1] if total_p > 0 else None
+    pregunta_id_actual = orden_ids[page - 1] if total_p > 0 else None
+    pregunta_actual = None
+    if pregunta_id_actual:
+        pregunta_actual = dict(db_execute(conn, 'SELECT * FROM preguntas WHERE id = ?', (pregunta_id_actual,)).fetchone())
     
     # Obtener respuestas guardadas desde la base de datos
     intento_id = session.get(f'intento_id_{eval_id}')
@@ -444,6 +456,7 @@ def profesor_panel():
             'seccion': ev['seccion'],
             'duracion_minutos': ev['duracion_minutos'],
             'codigo_acceso': ev['codigo_acceso'],
+            'activa': ev['activa'] if 'activa' in ev.keys() else 1,
             'total_intentos': total_intentos,
             'completados': completados,
             'pendientes': pendientes,
@@ -472,6 +485,17 @@ def eliminar_evaluacion(eval_id):
     conn = get_db()
     db_execute(conn, 'DELETE FROM evaluaciones WHERE id = ?', (eval_id,))
     conn.commit()
+    return redirect(url_for('profesor_panel'))
+
+@app.route('/profesor/toggle_activa/<int:eval_id>', methods=['POST'])
+def toggle_activa(eval_id):
+    """Activa o desactiva una evaluación. Al activarla, queda 'guardada' y visible para estudiantes."""
+    conn = get_db()
+    ev = db_execute(conn, 'SELECT activa FROM evaluaciones WHERE id = ?', (eval_id,)).fetchone()
+    if ev:
+        nueva_activa = 1 if not ev['activa'] else 0
+        db_execute(conn, 'UPDATE evaluaciones SET activa = ? WHERE id = ?', (nueva_activa, eval_id))
+        conn.commit()
     return redirect(url_for('profesor_panel'))
 
 @app.route('/profesor/evaluacion/<int:eval_id>')
