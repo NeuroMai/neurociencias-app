@@ -5,77 +5,50 @@
     <title>Rindiendo Evaluación</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <style>
-        @media print {
-            body { display: none !important; }
-        }
+        @media print { body { display: none !important; } }
         .watermark-disclaimer {
-            user-select: none;
-            -webkit-user-select: none;
-            font-size: 0.85rem;
-            color: #6c757d;
-            border: 1px dashed #dc3545;
-            background-color: #fff8f8;
-            padding: 8px 12px;
-            border-radius: 6px;
-            margin-bottom: 15px;
-            text-align: center;
+            user-select: none; -webkit-user-select: none;
+            font-size: 0.85rem; color: #6c757d;
+            border: 1px dashed #dc3545; background-color: #fff8f8;
+            padding: 8px 12px; border-radius: 6px;
+            margin-bottom: 15px; text-align: center;
         }
-        .logo-final {
-            max-width: 180px;
-            height: auto;
-            margin: 20px auto 10px auto;
-            display: block;
-        }
-        #modal-entregado {
+        .logo-final { max-width: 180px; height: auto; margin: 20px auto 10px auto; display: block; }
+
+        /* Modal base */
+        .modal-overlay {
             display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7);
-            z-index: 9999;
-            justify-content: center;
-            align-items: center;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); z-index: 9999;
+            justify-content: center; align-items: center;
         }
-        #modal-entregado.show {
-            display: flex;
-        }
-        #modal-entregado .modal-content {
-            background: white;
-            border-radius: 12px;
-            padding: 2rem;
-            max-width: 500px;
-            width: 90%;
-            text-align: center;
+        .modal-overlay.show { display: flex; }
+        .modal-overlay .modal-content {
+            background: white; border-radius: 12px; padding: 2rem;
+            max-width: 500px; width: 90%; text-align: center;
             box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-            border-top: 6px solid #d9534f;
         }
-        #modal-entregado .modal-content h2 { font-weight: 700; margin-bottom: 1rem; }
-        #modal-entregado .modal-content .puntaje-box {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 1rem;
-            margin: 1.5rem 0;
+        .modal-overlay .modal-content h2 { font-weight: 700; margin-bottom: 1rem; }
+        .modal-overlay .modal-content .puntaje-box {
+            background: #f8f9fa; border-radius: 8px; padding: 1rem; margin: 1.5rem 0;
         }
-        #modal-entregado .modal-content .puntaje-box .label {
-            font-size: 0.85rem;
-            color: #6c757d;
-            text-transform: uppercase;
-            font-weight: 600;
+        .modal-overlay .modal-content .puntaje-box .label {
+            font-size: 0.85rem; color: #6c757d; text-transform: uppercase; font-weight: 600;
         }
-        #modal-entregado .modal-content .puntaje-box .valor {
-            font-size: 1.8rem;
-            font-weight: 700;
-            color: #212529;
+        .modal-overlay .modal-content .puntaje-box .valor {
+            font-size: 1.8rem; font-weight: 700; color: #212529;
         }
+
+        /* Modal normal: borde verde */
+        #modal-normal .modal-content { border-top: 6px solid #28a745; }
+        /* Modal infraccion: borde rojo */
+        #modal-infraccion .modal-content { border-top: 6px solid #dc3545; }
     </style>
 </head>
 <body class="bg-light py-4">
 
     <div class="container" style="max-width: 800px;">
-        
-        <div class="alert alert-danger text-center py-1 mb-2 small" id="screenshot-protection-badge" style="display: none;">
-             Captura de pantalla bloqueada por la aplicación
-        </div>
-        
+
         <!-- Header con Temporizador -->
         <div class="d-flex justify-content-between align-items-center bg-white p-3 rounded shadow-sm mb-3">
             <div>
@@ -88,10 +61,10 @@
         </div>
 
         <div class="watermark-disclaimer">
-             Estudiante: {{ session.get('estudiante_nombre', '') }} ({{ session.get('estudiante_rut', '') }})<br>
+             Estudiante: {{ session.get('estudiante_nombre', '') }} ({{ session.get('estudiante_rut', '') }})
         </div>
 
-        <!-- Tarjeta de Pregunta (contenido dinámico) -->
+        <!-- Tarjeta de Pregunta (contenido dinámico AJAX) -->
         <div id="pregunta-container">
             {% include '_pregunta_card.html' %}
         </div>
@@ -109,10 +82,7 @@
                 {% if page < total_p %}
                     <button type="button" class="btn btn-primary" onclick="navegarPagina({{ page + 1 }})">Siguiente »</button>
                 {% else %}
-                    <form action="/estudiante/finalizar/{{ evaluacion.id }}" method="POST" id="form-finalizar" onsubmit="limpiarTimerStorage();">
-                        <input type="hidden" name="razon_finalizacion" value="Completado Normal">
-                        <button type="submit" class="btn btn-success btn-lg">Entregar Evaluación</button>
-                    </form>
+                    <button type="button" class="btn btn-success btn-lg" onclick="entregarEvaluacion()">Entregar Evaluación</button>
                 {% endif %}
             </div>
         </div>
@@ -125,22 +95,43 @@
 
     </div>
 
-    <!-- Modal de Evaluación Entregada -->
-    <div id="modal-entregado">
+    <!-- ===== MODAL 1: ENTREGA VOLUNTARIA (NORMAL) ===== -->
+    <div class="modal-overlay" id="modal-normal">
         <div class="modal-content">
             <div class="mb-3">
                 <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo UDP" style="max-height: 80px;" onerror="this.style.display='none'">
             </div>
-            <h2>Evaluación Entregada</h2>
-            <p class="text-muted">Tus respuestas han sido registradas e ingresadas con éxito en el sistema.</p>
+            <h2>Evaluación Terminada</h2>
+            <p class="text-muted">Tus respuestas han sido registradas con éxito en el sistema.</p>
             <div class="puntaje-box">
-                <div class="label">Puntaje obtenido</div>
-                <div class="valor" id="puntaje-final">0 / 0 pts</div>
+                <div class="label">Respuestas Correctas</div>
+                <div class="valor" id="normal-correctas">0 de 0</div>
                 <hr class="my-2">
-                <div class="text-muted" id="correctas-count">0 de 0 correctas</div>
+                <div class="label">Puntaje Obtenido</div>
+                <div class="valor" id="normal-puntaje">0 / 0 pts</div>
             </div>
-            <p class="text-muted small">Puedes cerrar esta página o ventana sin problemas.</p>
-            <button type="button" class="btn btn-red" onclick="window.location.href='/estudiante'">Ir al Portal</button>
+            <p class="text-muted small">Puedes cerrar la página o ventana sin problemas. Tus resultados ya han sido guardados.</p>
+            <button type="button" class="btn btn-success" onclick="window.location.href='/estudiante'">Ir al Portal</button>
+        </div>
+    </div>
+
+    <!-- ===== MODAL 2: INFRACCIÓN (SALIDA/CAMBIO DE PESTAÑA) ===== -->
+    <div class="modal-overlay" id="modal-infraccion">
+        <div class="modal-content">
+            <div class="mb-3">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo UDP" style="max-height: 80px;" onerror="this.style.display='none'">
+            </div>
+            <h2>Infracción Detectada: Evaluación Finalizada</h2>
+            <p class="text-muted">Has salido de la página de la evaluación. Tu intento ha sido terminado automáticamente.</p>
+            <div class="puntaje-box">
+                <div class="label">Respuestas Correctas hasta el momento</div>
+                <div class="valor" id="infra-correctas">0 de 0</div>
+                <hr class="my-2">
+                <div class="label">Puntaje Obtenido</div>
+                <div class="valor" id="infra-puntaje">0 / 0 pts</div>
+            </div>
+            <p class="text-muted small">Tus respuestas han sido guardadas y la evaluación ha sido cerrada.</p>
+            <button type="button" class="btn btn-danger" onclick="window.location.href='/estudiante'">Ir al Portal</button>
         </div>
     </div>
 
@@ -154,26 +145,20 @@
         const duracionMinutos = {{ evaluacion.duracion_minutos }};
         let paginaActual = {{ page }};
         let timerKey = 'examen_timer_' + evalId;
-        
+
         let tiempoRestanteSegundos = localStorage.getItem(timerKey);
         const limiteSegundos = duracionMinutos * 60;
-        
         if (!tiempoRestanteSegundos || isNaN(tiempoRestanteSegundos) || parseInt(tiempoRestanteSegundos) > limiteSegundos) {
             tiempoRestanteSegundos = limiteSegundos;
             localStorage.setItem(timerKey, tiempoRestanteSegundos);
         }
 
         const timerDisplay = document.getElementById('timer');
-
         function formatearTiempo(s) {
-            let m = Math.floor(s / 60);
-            let seg = s % 60;
+            let m = Math.floor(s / 60), seg = s % 60;
             return (m < 10 ? '0' : '') + m + ':' + (seg < 10 ? '0' : '') + seg;
         }
-
-        function actualizarReloj() {
-            timerDisplay.textContent = formatearTiempo(tiempoRestanteSegundos);
-        }
+        function actualizarReloj() { timerDisplay.textContent = formatearTiempo(tiempoRestanteSegundos); }
         actualizarReloj();
 
         const interval = setInterval(() => {
@@ -187,51 +172,43 @@
             }
         }, 1000);
 
-        function limpiarTimerStorage() {
-            localStorage.removeItem(timerKey);
-        }
+        function limpiarTimerStorage() { localStorage.removeItem(timerKey); }
 
+        // Guardar respuesta vía AJAX (se llama desde _pregunta_card.html)
         function guardarRespuesta(pId, val) {
             fetch('/estudiante/guardar_respuesta/' + evalId, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ pregunta_id: pId, respuesta: val })
-            });
+            }).catch(function(err) { console.log('Error guardando respuesta:', err); });
         }
 
+        // Actualizar botones de navegación según la página actual
         function actualizarBotones(pagina) {
-            const navPrev = document.getElementById('nav-prev');
-            const navNext = document.getElementById('nav-next');
-            
-            // Botón Anterior
+            var navPrev = document.getElementById('nav-prev');
+            var navNext = document.getElementById('nav-next');
             if (pagina > 1) {
                 navPrev.innerHTML = '<button type="button" class="btn btn-outline-secondary" onclick="navegarPagina(' + (pagina - 1) + ')">« Anterior</button>';
             } else {
                 navPrev.innerHTML = '<div></div>';
             }
-            
-            // Botón Siguiente / Entregar
             if (pagina < totalPreguntas) {
                 navNext.innerHTML = '<button type="button" class="btn btn-primary" onclick="navegarPagina(' + (pagina + 1) + ')">Siguiente »</button>';
             } else {
-                navNext.innerHTML = '<form action="/estudiante/finalizar/' + evalId + '" method="POST" id="form-finalizar" onsubmit="limpiarTimerStorage();">' +
-                    '<input type="hidden" name="razon_finalizacion" value="Completado Normal">' +
-                    '<button type="submit" class="btn btn-success btn-lg">Entregar Evaluación</button></form>';
+                navNext.innerHTML = '<button type="button" class="btn btn-success btn-lg" onclick="entregarEvaluacion()">Entregar Evaluación</button>';
             }
-            
-            // Logo
-            const logoContainer = document.getElementById('logo-container');
+            var logo = document.getElementById('logo-container');
             if (pagina === totalPreguntas) {
-                logoContainer.innerHTML = '<img src="{{ url_for('static', filename='logo_secundario.png') }}" alt="Logo Institucional" class="logo-final" onerror="this.style.display=\'none\'">';
+                logo.innerHTML = '<img src="{{ url_for('static', filename='logo_secundario.png') }}" alt="Logo" class="logo-final" onerror="this.style.display=\'none\'">';
             } else {
-                logoContainer.innerHTML = '';
+                logo.innerHTML = '';
             }
         }
 
+        // Navegación AJAX entre preguntas
         function navegarPagina(pagina) {
-            // Guardar respuesta actual
-            const inputSel = document.querySelector('input[name="respuesta"]:checked');
-            const textarea = document.querySelector('textarea[name="respuesta"]');
+            var inputSel = document.querySelector('input[name="respuesta"]:checked');
+            var textarea = document.querySelector('textarea[name="respuesta"]');
             if (inputSel) {
                 guardarRespuesta(inputSel.getAttribute('data-pregunta-id'), inputSel.value);
             } else if (textarea) {
@@ -239,72 +216,97 @@
             }
 
             fetch('/estudiante/rendir/' + evalId + '?page=' + pagina + '&ajax=1')
-                .then(r => r.text())
-                .then(html => {
+                .then(function(r) { return r.text(); })
+                .then(function(html) {
                     document.getElementById('pregunta-container').innerHTML = html;
                     document.getElementById('page-indicator').textContent = pagina;
                     paginaActual = pagina;
                     actualizarBotones(pagina);
                     history.pushState(null, null, '/estudiante/rendir/' + evalId + '?page=' + pagina);
                 })
-                .catch(err => console.error('Error al navegar:', err));
+                .catch(function(err) { console.error('Error al navegar:', err); });
         }
 
-        let examenEnviado = false;
+        // --- VARIABLES DE ESTADO ---
+        var examenEnviado = false;
 
-        function mostrarModalResultado(obtenido, total, correctas, totalAuto) {
-            document.getElementById('puntaje-final').textContent = obtenido + ' / ' + total + ' pts';
-            document.getElementById('correctas-count').textContent = correctas + ' de ' + totalAuto + ' correctas';
-            document.getElementById('modal-entregado').classList.add('show');
+        // Mostrar modal de entrega voluntaria
+        function mostrarModalNormal(obtenido, total, correctas, totalAuto) {
+            document.getElementById('normal-puntaje').textContent = obtenido + ' / ' + total + ' pts';
+            document.getElementById('normal-correctas').textContent = correctas + ' de ' + totalAuto;
+            document.getElementById('modal-normal').classList.add('show');
         }
 
-        function finalizarPrueba(razon) {
+        // Mostrar modal de infracción
+        function mostrarModalInfraccion(obtenido, total, correctas, totalAuto) {
+            document.getElementById('infra-puntaje').textContent = obtenido + ' / ' + total + ' pts';
+            document.getElementById('infra-correctas').textContent = correctas + ' de ' + totalAuto;
+            document.getElementById('modal-infraccion').classList.add('show');
+        }
+
+        // Función única para finalizar la prueba (envía al servidor)
+        function finalizarPrueba(razon, esInfraccion) {
             if (examenEnviado) return;
             examenEnviado = true;
             limpiarTimerStorage();
 
-            const fd = new FormData();
+            // Guardar respuesta actual antes de finalizar
+            var inputSel = document.querySelector('input[name="respuesta"]:checked');
+            var textarea = document.querySelector('textarea[name="respuesta"]');
+            if (inputSel) {
+                guardarRespuesta(inputSel.getAttribute('data-pregunta-id'), inputSel.value);
+            } else if (textarea) {
+                guardarRespuesta(textarea.getAttribute('data-pregunta-id'), textarea.value);
+            }
+
+            // Enviar finalización al servidor
+            var fd = new FormData();
             fd.append('razon_finalizacion', razon);
 
             fetch('/estudiante/finalizar/' + evalId, { method: 'POST', body: fd })
-                .then(r => r.json())
-                .then(d => mostrarModalResultado(d.puntaje_obtenido, d.puntaje_total, d.preguntas_correctas, d.total_preguntas_auto))
-                .catch(() => {
-                    let form = document.getElementById('form-finalizar');
-                    if (!form) {
-                        form = document.createElement('form');
-                        form.method = 'POST';
-                        form.action = '/estudiante/finalizar/' + evalId;
-                        const inp = document.createElement('input');
-                        inp.type = 'hidden'; inp.name = 'razon_finalizacion'; inp.value = razon;
-                        form.appendChild(inp);
-                        document.body.appendChild(form);
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (esInfraccion) {
+                        mostrarModalInfraccion(d.puntaje_obtenido, d.puntaje_total, d.preguntas_correctas, d.total_preguntas_auto);
+                    } else {
+                        mostrarModalNormal(d.puntaje_obtenido, d.puntaje_total, d.preguntas_correctas, d.total_preguntas_auto);
                     }
-                    form.submit();
+                })
+                .catch(function() {
+                    // Fallback: si AJAX falla, mostrar modal con datos locales
+                    if (esInfraccion) {
+                        mostrarModalInfraccion('?', '?', '?', '?');
+                    } else {
+                        mostrarModalNormal('?', '?', '?', '?');
+                    }
                 });
         }
 
-        // Anti-trampa: solo detectar cambio de pestaña/ventana real
-        // NO usar blur (se dispara con clicks en botones)
-        document.addEventListener('visibilitychange', () => {
+        // Entregar evaluación voluntariamente (llamado desde el botón)
+        function entregarEvaluacion() {
+            if (examenEnviado) return;
+            finalizarPrueba('Completado Normal', false);
+        }
+
+        // ===== ANTI-TRAMPA =====
+        // Solo se activa con visibilitychange (cambio real de pestaña/ventana)
+        // NO usar blur porque se dispara al hacer click en botones
+        document.addEventListener('visibilitychange', function() {
             if (document.hidden) {
-                finalizarPrueba('Finalizado por salir de la pestaña o cambiar de aplicación');
+                finalizarPrueba('Finalizado por salir de la pestaña o cambiar de aplicación', true);
             }
         });
 
-        if (typeof Android !== 'undefined' && Android.isScreenshotBlocked) {
-            document.getElementById('screenshot-protection-badge').style.display = 'block';
-        }
-
+        // Detección de PrintScreen
         document.addEventListener('keydown', function(e) {
             if (e.key === 'PrintScreen' || e.keyCode === 44) {
                 e.preventDefault();
-                finalizarPrueba('Finalizado por intento de captura de pantalla');
+                finalizarPrueba('Finalizado por intento de captura de pantalla', true);
                 return false;
             }
             if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === '3' || e.key === '4' || e.key === '5')) {
                 e.preventDefault();
-                finalizarPrueba('Finalizado por intento de captura de pantalla');
+                finalizarPrueba('Finalizado por intento de captura de pantalla', true);
                 return false;
             }
         });
