@@ -315,6 +315,8 @@ def estudiante_finalizar(eval_id):
     puntaje_obtenido_auto = 0
     puntaje_total_prueba = 0
     tiene_desarrollo = False
+    preguntas_correctas = 0
+    total_preguntas_auto = 0
 
     for p in preguntas:
         p_id = p['id']
@@ -326,20 +328,25 @@ def estudiante_finalizar(eval_id):
         es_correcta = 0
 
         if p['tipo'] == 'opcion_multiple':
+            total_preguntas_auto += 1
             if resp_estudiante and resp_estudiante.strip().upper() == str(p['respuesta_correcta']).strip().upper():
                 puntaje_obtenido_auto += p['puntaje']
                 es_correcta = 1
+                preguntas_correctas += 1
         elif p['tipo'] == 'verdadero_falso':
+            total_preguntas_auto += 1
             resp_correcta = str(p['respuesta_correcta'] or '').strip().upper()
             resp_estudiante_norm = resp_estudiante.strip().upper() if resp_estudiante else ''
             if resp_correcta == 'A':  # Verdadero
                 if resp_estudiante_norm == 'V':
                     puntaje_obtenido_auto += p['puntaje']
                     es_correcta = 1
+                    preguntas_correctas += 1
             else:  # Falso (B, vacío, etc.)
                 if resp_estudiante_norm == 'F':
                     puntaje_obtenido_auto += p['puntaje']
                     es_correcta = 1
+                    preguntas_correctas += 1
         elif p['tipo'] == 'desarrollo':
             tiene_desarrollo = True
             # Insertar en respuestas_desarrollo para su revisión manual
@@ -372,6 +379,8 @@ def estudiante_finalizar(eval_id):
             'status': 'ok',
             'puntaje_obtenido': puntaje_obtenido_auto,
             'puntaje_total': puntaje_total_prueba,
+            'preguntas_correctas': preguntas_correctas,
+            'total_preguntas_auto': total_preguntas_auto,
             'intento_id': intento_id
         })
 
@@ -540,7 +549,24 @@ def intentos_evaluacion(eval_id):
         ORDER BY i.fecha DESC
     ''', (eval_id,)).fetchall()
     
-    return render_template('intentos_evaluacion.html', evaluacion=evaluacion, intentos=intentos)
+    # Para cada intento, contar respuestas correctas e incorrectas
+    intentos_con_info = []
+    for intento in intentos:
+        correctas = db_execute(conn, 'SELECT COUNT(*) as cnt FROM respuestas_estudiante WHERE intento_id = ? AND es_correcta = 1', (intento['id'],)).fetchone()['cnt']
+        total_respondidas = db_execute(conn, 'SELECT COUNT(*) as cnt FROM respuestas_estudiante WHERE intento_id = ?', (intento['id'],)).fetchone()['cnt']
+        intentos_con_info.append({
+            'id': intento['id'],
+            'estudiante_nombre': intento['estudiante_nombre'],
+            'estudiante_rut': intento['estudiante_rut'],
+            'puntaje_autocorregido': intento['puntaje_autocorregido'],
+            'puntaje_total_auto': intento['puntaje_total_auto'],
+            'puntaje_desarrollo': intento['puntaje_desarrollo'],
+            'estado_revision': intento['estado_revision'],
+            'correctas': correctas,
+            'total_respondidas': total_respondidas
+        })
+    
+    return render_template('intentos_evaluacion.html', evaluacion=evaluacion, intentos=intentos_con_info)
 
 # --- RUTAS DE REVISIÓN ---
 

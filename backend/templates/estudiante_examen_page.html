@@ -136,6 +136,8 @@
             <div class="puntaje-box">
                 <div class="label">Puntaje obtenido</div>
                 <div class="valor" id="puntaje-final">0 / 0 pts</div>
+                <hr class="my-2">
+                <div class="text-muted" id="correctas-count">0 de 0 correctas</div>
             </div>
             <p class="text-muted small">Puedes cerrar esta página o ventana sin problemas.</p>
             <button type="button" class="btn btn-red" onclick="window.location.href='/estudiante'">Ir al Portal</button>
@@ -250,8 +252,9 @@
 
         let examenEnviado = false;
 
-        function mostrarModalResultado(obtenido, total) {
+        function mostrarModalResultado(obtenido, total, correctas, totalAuto) {
             document.getElementById('puntaje-final').textContent = obtenido + ' / ' + total + ' pts';
+            document.getElementById('correctas-count').textContent = correctas + ' de ' + totalAuto + ' correctas';
             document.getElementById('modal-entregado').classList.add('show');
         }
 
@@ -265,7 +268,7 @@
 
             fetch('/estudiante/finalizar/' + evalId, { method: 'POST', body: fd })
                 .then(r => r.json())
-                .then(d => mostrarModalResultado(d.puntaje_obtenido, d.puntaje_total))
+                .then(d => mostrarModalResultado(d.puntaje_obtenido, d.puntaje_total, d.preguntas_correctas, d.total_preguntas_auto))
                 .catch(() => {
                     let form = document.getElementById('form-finalizar');
                     if (!form) {
@@ -281,24 +284,12 @@
                 });
         }
 
-        // Anti-trampa: solo finalizar si realmente cambió de pestaña/ventana
-        // NO finalizar por blur de click en botones
-        let ultimoFocus = Date.now();
-
+        // Anti-trampa: solo detectar cambio de pestaña/ventana real
+        // NO usar blur (se dispara con clicks en botones)
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 finalizarPrueba('Finalizado por salir de la pestaña o cambiar de aplicación');
             }
-        });
-
-        window.addEventListener('blur', () => {
-            // Solo finalizar si el blur NO fue causado por un click en un botón de navegación
-            setTimeout(() => {
-                // Si después de 300ms el documento sigue sin foco, es un cambio real de ventana
-                if (!document.hasFocus() && !examenEnviado) {
-                    finalizarPrueba('Finalizado por minimizar la ventana o perder foco');
-                }
-            }, 300);
         });
 
         if (typeof Android !== 'undefined' && Android.isScreenshotBlocked) {

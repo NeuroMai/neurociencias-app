@@ -42,6 +42,7 @@
                             <th>Estudiante</th>
                             <th>RUT</th>
                             <th>Puntaje Auto.</th>
+                            <th>Correctas</th>
                             <th>Desarrollo</th>
                             <th>Estado Revisión</th>
                             <th>Acción</th>
@@ -53,6 +54,9 @@
                             <td>{{ i.estudiante_nombre }}</td>
                             <td>{{ i.estudiante_rut }}</td>
                             <td>{{ i.puntaje_autocorregido }} / {{ i.puntaje_total_auto }}</td>
+                            <td>
+                                <span class="text-success fw-bold">{{ i.correctas }}</span> / {{ i.total_respondidas }}
+                            </td>
                             <td>{{ i.puntaje_desarrollo }} pts</td>
                             <td>
                                 {% if i.estado_revision == 'completado' %}
