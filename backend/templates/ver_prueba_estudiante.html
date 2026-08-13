@@ -123,38 +123,58 @@
 
                         {% if tipo == 'opcion_multiple' %}
                             {% set opciones = [('A', p.opcion_a), ('B', p.opcion_b), ('C', p.opcion_c), ('D', p.opcion_d)] %}
+                            {% set resp_est = (p.respuesta_estudiante or '').strip().upper() %}
+                            {% set resp_corr = (p.respuesta_correcta or '').strip().upper() %}
                             {% for letra, texto in opciones %}
                                 {% if texto %}
+                                    {% set es_seleccionada = resp_est == letra %}
+                                    {% set es_correcta_op = resp_corr == letra %}
                                     <div class="opcion-item 
-                                        {% if p.respuesta_correcta and letra|upper == p.respuesta_correcta|upper %}
+                                        {% if es_seleccionada and es_correcta_op %}
                                             opcion-correcta
-                                        {% elif p.respuesta_estudiante and letra|upper == p.respuesta_estudiante|upper and p.respuesta_estudiante|upper != p.respuesta_correcta|upper %}
+                                        {% elif es_seleccionada and not es_correcta_op %}
                                             opcion-incorrecta
+                                        {% elif es_correcta_op and not es_seleccionada %}
+                                            opcion-correcta
                                         {% endif %}">
                                         <strong>{{ letra }})</strong> {{ texto }}
-                                        {% if p.respuesta_correcta and letra|upper == p.respuesta_correcta|upper %}
+                                        {% if es_correcta_op %}
                                             <span class="text-success fw-bold">&#10003; (Correcta)</span>
                                         {% endif %}
-                                        {% if p.respuesta_estudiante and letra|upper == p.respuesta_estudiante|upper %}
-                                            <span class="text-danger fw-bold">&#10007; (Seleccionada)</span>
+                                        {% if es_seleccionada %}
+                                            <span class="fw-bold {% if es_correcta_op %}text-success{% else %}text-danger{% endif %}">&#10148; (Seleccionada por el alumno)</span>
                                         {% endif %}
                                     </div>
                                 {% endif %}
                             {% endfor %}
+                            {% if resp_est and resp_est != resp_corr %}
+                                <div class="mt-2 p-2 bg-warning bg-opacity-10 border border-warning rounded">
+                                    <strong class="text-danger">&#9888; Respuesta del alumno:</strong> <span class="text-danger fw-bold">{{ resp_est }}</span>
+                                    &nbsp;|&nbsp; <strong class="text-success">Respuesta correcta:</strong> <span class="text-success fw-bold">{{ resp_corr }}</span>
+                                </div>
+                            {% endif %}
                         {% elif tipo == 'verdadero_falso' %}
                             {% set resp_correcta_vf = (p.respuesta_correcta or '').strip().upper() %}
                             {% set resp_est_vf = (p.respuesta_estudiante or '').strip().upper() %}
                             {% set correcta_vf = resp_correcta_vf == 'A' %}
-                            <div class="opcion-item {% if correcta_vf %}opcion-correcta{% elif resp_est_vf == 'V' and not correcta_vf %}opcion-incorrecta{% endif %}">
+                            {% set es_v_seleccionado = resp_est_vf == 'V' %}
+                            {% set es_f_seleccionado = resp_est_vf == 'F' %}
+                            <div class="opcion-item {% if correcta_vf %}opcion-correcta{% elif es_v_seleccionado %}opcion-incorrecta{% endif %}">
                                 Verdadero
                                 {% if correcta_vf %}<span class="text-success fw-bold">&#10003; (Correcta)</span>{% endif %}
-                                {% if resp_est_vf == 'V' %}<span class="text-danger fw-bold">&#10007; (Seleccionada)</span>{% endif %}
+                                {% if es_v_seleccionado %}<span class="fw-bold {% if correcta_vf %}text-success{% else %}text-danger{% endif %}">&#10148; (Seleccionada por el alumno)</span>{% endif %}
                             </div>
-                            <div class="opcion-item {% if not correcta_vf %}opcion-correcta{% elif resp_est_vf == 'F' and correcta_vf %}opcion-incorrecta{% endif %}">
+                            <div class="opcion-item {% if not correcta_vf %}opcion-correcta{% elif es_f_seleccionado %}opcion-incorrecta{% endif %}">
                                 Falso
                                 {% if not correcta_vf %}<span class="text-success fw-bold">&#10003; (Correcta)</span>{% endif %}
-                                {% if resp_est_vf == 'F' %}<span class="text-danger fw-bold">&#10007; (Seleccionada)</span>{% endif %}
+                                {% if es_f_seleccionado %}<span class="fw-bold {% if not correcta_vf %}text-success{% else %}text-danger{% endif %}">&#10148; (Seleccionada por el alumno)</span>{% endif %}
                             </div>
+                            {% if resp_est_vf and ((correcta_vf and es_f_seleccionado) or (not correcta_vf and es_v_seleccionado)) %}
+                                <div class="mt-2 p-2 bg-warning bg-opacity-10 border border-warning rounded">
+                                    <strong class="text-danger">&#9888; Respuesta del alumno:</strong> <span class="text-danger fw-bold">{% if es_v_seleccionado %}V (Verdadero){% else %}F (Falso){% endif %}</span>
+                                    &nbsp;|&nbsp; <strong class="text-success">Respuesta correcta:</strong> <span class="text-success fw-bold">{% if correcta_vf %}V (Verdadero){% else %}F (Falso){% endif %}</span>
+                                </div>
+                            {% endif %}
                         {% endif %}
 
                         {% if tipo == 'desarrollo' %}
