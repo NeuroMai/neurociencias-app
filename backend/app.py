@@ -377,8 +377,8 @@ def estudiante_finalizar(eval_id):
     session.pop(f'acceso_autorizado_{eval_id}', None)
     session.pop(f'intento_id_{eval_id}', None)
 
-    # Si es una solicitud AJAX, devolver JSON con el resultado
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.best == 'application/json':
+    # Si es una solicitud AJAX (JSON), devolver JSON con el resultado
+    if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({
             'status': 'ok',
             'puntaje_obtenido': puntaje_obtenido_auto,
