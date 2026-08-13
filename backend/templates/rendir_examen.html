@@ -6,78 +6,42 @@
     <title>Rendir Examen - Neurociencias</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <style>
-        @media print {
-            body { display: none !important; }
-        }
+        @media print { body { display: none !important; } }
         .watermark-disclaimer {
-            user-select: none;
-            -webkit-user-select: none;
-            font-size: 0.85rem;
-            color: #6c757d;
-            border: 1px dashed #dc3545;
-            background-color: #fff8f8;
-            padding: 8px 12px;
-            border-radius: 6px;
-            margin-bottom: 15px;
-            text-align: center;
+            user-select: none; -webkit-user-select: none;
+            font-size: 0.85rem; color: #6c757d;
+            border: 1px dashed #dc3545; background-color: #fff8f8;
+            padding: 8px 12px; border-radius: 6px;
+            margin-bottom: 15px; text-align: center;
         }
-        .logo-final {
-            max-width: 180px;
-            height: auto;
-            margin: 20px auto 10px auto;
-            display: block;
-        }
-        /* Modal de Evaluación Entregada */
+        .logo-final { max-width: 180px; height: auto; margin: 20px auto 10px auto; display: block; }
         #modal-entregado {
-            display: none;
-            position: fixed;
+            display: none; position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7);
-            z-index: 9999;
-            justify-content: center;
-            align-items: center;
+            background: rgba(0,0,0,0.7); z-index: 9999;
+            justify-content: center; align-items: center;
         }
-        #modal-entregado.show {
-            display: flex;
-        }
+        #modal-entregado.show { display: flex; }
         #modal-entregado .modal-content {
-            background: white;
-            border-radius: 12px;
-            padding: 2rem;
-            max-width: 500px;
-            width: 90%;
-            text-align: center;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-            border-top: 6px solid #d9534f;
+            background: white; border-radius: 12px; padding: 2rem;
+            max-width: 500px; width: 90%; text-align: center;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3); border-top: 6px solid #d9534f;
         }
-        #modal-entregado .modal-content h2 {
-            font-weight: 700;
-            margin-bottom: 1rem;
-        }
+        #modal-entregado .modal-content h2 { font-weight: 700; margin-bottom: 1rem; }
         #modal-entregado .modal-content .puntaje-box {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 1rem;
-            margin: 1.5rem 0;
+            background: #f8f9fa; border-radius: 8px; padding: 1rem; margin: 1.5rem 0;
         }
         #modal-entregado .modal-content .puntaje-box .label {
-            font-size: 0.85rem;
-            color: #6c757d;
-            text-transform: uppercase;
-            font-weight: 600;
+            font-size: 0.85rem; color: #6c757d; text-transform: uppercase; font-weight: 600;
         }
         #modal-entregado .modal-content .puntaje-box .valor {
-            font-size: 1.8rem;
-            font-weight: 700;
-            color: #212529;
+            font-size: 1.8rem; font-weight: 700; color: #212529;
         }
     </style>
 </head>
 <body class="bg-light py-4">
-
     <div class="container" style="max-width: 800px;">
 
-        <!-- Header con Temporizador -->
         <div class="d-flex justify-content-between align-items-center bg-white p-3 rounded shadow-sm mb-3">
             <div>
                 <h5 class="m-0 fw-bold">{{ evaluacion.titulo }}</h5>
@@ -88,26 +52,23 @@
             </div>
         </div>
 
-        <!-- Disclaimer Antifraude -->
         <div class="watermark-disclaimer">
              Estudiante: {{ session.get('estudiante_nombre', '') }} ({{ session.get('estudiante_rut', '') }})
         </div>
 
-        <!-- Tarjeta de Pregunta (contenido dinámico) -->
         <div id="pregunta-container">
             {% include '_pregunta_card.html' %}
         </div>
 
-        <!-- Botones de Navegación -->
         <div class="d-flex justify-content-between align-items-center" id="nav-buttons">
-            <div>
+            <div id="nav-prev">
                 {% if page > 1 %}
                     <button type="button" class="btn btn-outline-secondary" onclick="navegarPagina({{ page - 1 }})">« Anterior</button>
                 {% else %}
                     <div></div>
                 {% endif %}
             </div>
-            <div>
+            <div id="nav-next">
                 {% if page < total_p %}
                     <button type="button" class="btn btn-primary" onclick="navegarPagina({{ page + 1 }})">Siguiente »</button>
                 {% else %}
@@ -119,17 +80,14 @@
             </div>
         </div>
 
-        {% if page == total_p %}
-            <div class="text-center mt-4" id="logo-container">
+        <div class="text-center mt-4" id="logo-container">
+            {% if page == total_p %}
                 <img src="{{ url_for('static', filename='logo_secundario.png') }}" alt="Logo Institucional" class="logo-final" onerror="this.style.display='none'">
-            </div>
-        {% else %}
-            <div class="text-center mt-4" id="logo-container" style="display:none;"></div>
-        {% endif %}
+            {% endif %}
+        </div>
 
     </div>
 
-    <!-- Modal de Evaluación Entregada -->
     <div id="modal-entregado">
         <div class="modal-content">
             <div class="mb-3">
@@ -151,28 +109,24 @@
         window.onpopstate = function () { history.go(1); };
 
         const evalId = "{{ evaluacion.id }}";
+        const totalPreguntas = {{ total_p }};
         const duracionMinutos = {{ evaluacion.duracion_minutos }};
+        let paginaActual = {{ page }};
         let timerKey = 'examen_timer_' + evalId;
         
         let tiempoRestanteSegundos = localStorage.getItem(timerKey);
         const limiteSegundos = duracionMinutos * 60;
-        
         if (!tiempoRestanteSegundos || isNaN(tiempoRestanteSegundos) || parseInt(tiempoRestanteSegundos) > limiteSegundos) {
             tiempoRestanteSegundos = limiteSegundos;
             localStorage.setItem(timerKey, tiempoRestanteSegundos);
         }
 
         const timerDisplay = document.getElementById('timer');
-
         function formatearTiempo(s) {
-            let m = Math.floor(s / 60);
-            let seg = s % 60;
+            let m = Math.floor(s / 60), seg = s % 60;
             return (m < 10 ? '0' : '') + m + ':' + (seg < 10 ? '0' : '') + seg;
         }
-
-        function actualizarReloj() {
-            timerDisplay.textContent = formatearTiempo(tiempoRestanteSegundos);
-        }
+        function actualizarReloj() { timerDisplay.textContent = formatearTiempo(tiempoRestanteSegundos); }
         actualizarReloj();
 
         const interval = setInterval(() => {
@@ -186,9 +140,7 @@
             }
         }, 1000);
 
-        function limpiarTimerStorage() {
-            localStorage.removeItem(timerKey);
-        }
+        function limpiarTimerStorage() { localStorage.removeItem(timerKey); }
 
         function guardarRespuesta(pId, val) {
             fetch('/estudiante/guardar_respuesta/' + evalId, {
@@ -198,35 +150,48 @@
             });
         }
 
+        function actualizarBotones(pagina) {
+            const navPrev = document.getElementById('nav-prev');
+            const navNext = document.getElementById('nav-next');
+            if (pagina > 1) {
+                navPrev.innerHTML = '<button type="button" class="btn btn-outline-secondary" onclick="navegarPagina(' + (pagina - 1) + ')">« Anterior</button>';
+            } else {
+                navPrev.innerHTML = '<div></div>';
+            }
+            if (pagina < totalPreguntas) {
+                navNext.innerHTML = '<button type="button" class="btn btn-primary" onclick="navegarPagina(' + (pagina + 1) + ')">Siguiente »</button>';
+            } else {
+                navNext.innerHTML = '<form action="/estudiante/finalizar/' + evalId + '" method="POST" id="form-finalizar" onsubmit="limpiarTimerStorage();">' +
+                    '<input type="hidden" name="razon_finalizacion" value="Completado Normal">' +
+                    '<button type="submit" class="btn btn-success btn-lg">Entregar Evaluación</button></form>';
+            }
+            const logo = document.getElementById('logo-container');
+            if (pagina === totalPreguntas) {
+                logo.innerHTML = '<img src="{{ url_for('static', filename='logo_secundario.png') }}" alt="Logo" class="logo-final" onerror="this.style.display=\'none\'">';
+            } else {
+                logo.innerHTML = '';
+            }
+        }
+
         function navegarPagina(pagina) {
             const inputSel = document.querySelector('input[name="respuesta"]:checked');
             const textarea = document.querySelector('textarea[name="respuesta"]');
-            if (inputSel) {
-                guardarRespuesta(inputSel.getAttribute('data-pregunta-id'), inputSel.value);
-            } else if (textarea) {
-                guardarRespuesta(textarea.getAttribute('data-pregunta-id'), textarea.value);
-            }
+            if (inputSel) guardarRespuesta(inputSel.getAttribute('data-pregunta-id'), inputSel.value);
+            else if (textarea) guardarRespuesta(textarea.getAttribute('data-pregunta-id'), textarea.value);
 
             fetch('/estudiante/rendir/' + evalId + '?page=' + pagina + '&ajax=1')
                 .then(r => r.text())
                 .then(html => {
-                    const doc = new DOMParser().parseFromString(html, 'text/html');
-                    const cont = doc.getElementById('pregunta-container');
-                    if (cont) document.getElementById('pregunta-container').innerHTML = cont.innerHTML;
+                    document.getElementById('pregunta-container').innerHTML = html;
                     document.getElementById('page-indicator').textContent = pagina;
-                    const btns = doc.getElementById('nav-buttons');
-                    if (btns) document.getElementById('nav-buttons').innerHTML = btns.innerHTML;
-                    const logo = doc.getElementById('logo-container');
-                    if (logo) {
-                        document.getElementById('logo-container').innerHTML = logo.innerHTML;
-                        document.getElementById('logo-container').style.display = logo.style.display;
-                    }
+                    paginaActual = pagina;
+                    actualizarBotones(pagina);
                     history.pushState(null, null, '/estudiante/rendir/' + evalId + '?page=' + pagina);
-                });
+                })
+                .catch(err => console.error('Error:', err));
         }
 
         let examenEnviado = false;
-
         function mostrarModalResultado(obtenido, total) {
             document.getElementById('puntaje-final').textContent = obtenido + ' / ' + total + ' pts';
             document.getElementById('modal-entregado').classList.add('show');
@@ -236,10 +201,8 @@
             if (examenEnviado) return;
             examenEnviado = true;
             limpiarTimerStorage();
-
             const fd = new FormData();
             fd.append('razon_finalizacion', razon);
-
             fetch('/estudiante/finalizar/' + evalId, { method: 'POST', body: fd })
                 .then(r => r.json())
                 .then(d => mostrarModalResultado(d.puntaje_obtenido, d.puntaje_total))
@@ -247,12 +210,10 @@
                     let form = document.getElementById('form-finalizar');
                     if (!form) {
                         form = document.createElement('form');
-                        form.method = 'POST';
-                        form.action = '/estudiante/finalizar/' + evalId;
+                        form.method = 'POST'; form.action = '/estudiante/finalizar/' + evalId;
                         const inp = document.createElement('input');
                         inp.type = 'hidden'; inp.name = 'razon_finalizacion'; inp.value = razon;
-                        form.appendChild(inp);
-                        document.body.appendChild(form);
+                        form.appendChild(inp); document.body.appendChild(form);
                     }
                     form.submit();
                 });
@@ -262,7 +223,9 @@
             if (document.hidden) finalizarPrueba('Finalizado por salir de la pestaña o cambiar de aplicación');
         });
         window.addEventListener('blur', () => {
-            finalizarPrueba('Finalizado por minimizar la ventana o perder foco');
+            setTimeout(() => {
+                if (!document.hasFocus() && !examenEnviado) finalizarPrueba('Finalizado por minimizar la ventana o perder foco');
+            }, 300);
         });
         document.addEventListener('keydown', function(e) {
             if (e.key === 'PrintScreen' || e.keyCode === 44) { e.preventDefault(); finalizarPrueba('Finalizado por intento de captura de pantalla'); return false; }
