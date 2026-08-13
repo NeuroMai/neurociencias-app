@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel Docente - Neurociencias UDP</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        .header-bg { background-color: #212529; color: white; }
+        .btn-red { background-color: #d9534f; color: white; border: none; }
+        .btn-red:hover { background-color: #c9302c; color: white; }
+        .badge-code { background-color: #d9534f; color: white; font-size: 1rem; letter-spacing: 2px; }
+        .evaluacion-card { transition: box-shadow 0.2s; }
+        .evaluacion-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+        .estado-completado { color: #28a745; font-weight: 600; }
+        .estado-pendiente { color: #ffc107; font-weight: 600; }
+        .estado-sin-desarrollo { color: #6c757d; font-weight: 600; }
+        .tab-btn { cursor: pointer; }
+        .tab-btn.active { background-color: #d9534f; color: white; border-color: #d9534f; }
+        .tab-btn:not(.active) { background-color: #f8f9fa; color: #212529; border: 1px solid #dee2e6; }
+        .tab-btn:not(.active):hover { background-color: #e9ecef; }
+    </style>
+</head>
+<body class="bg-light py-4">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center p-3 rounded header-bg mb-4">
+            <h2 class="m-0 fw-bold">Panel Docente - Neurociencias UDP</h2>
+            <a href="/" class="btn btn-outline-light btn-sm">Cerrar Sesión</a>
+        </div>
+
+        <div class="row">
+            <div class="col-md-5 mb-4">
+                <div class="card shadow-sm p-4">
+                    <h4 class="fw-bold mb-3">Crear Nueva Evaluación</h4>
+
+                    <!-- Pestañas: Manual / Importar CSV -->
+                    <ul class="nav nav-pills mb-3" id="crearTab" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link tab-btn active" id="manual-tab" data-bs-toggle="pill" data-bs-target="#manual" type="button" role="tab">Crear Manualmente</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link tab-btn" id="csv-tab" data-bs-toggle="pill" data-bs-target="#csv" type="button" role="tab">Importar desde CSV</button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content">
+                        <!-- Pestaña: Crear Manualmente -->
+                        <div class="tab-pane fade show active" id="manual" role="tabpanel">
+                            <form action="/profesor/crear_evaluacion" method="POST">
+                                <div class="mb-3">
+                                    <label class="form-label">Título:</label>
+                                    <input type="text" name="titulo" class="form-control" required placeholder="Ej: Solemne 1">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Sección:</label>
+                                    <input type="text" name="seccion" class="form-control" required placeholder="Ej: Sección 2">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Duración (Minutos):</label>
+                                    <input type="number" name="duracion_minutos" class="form-control" value="60" required min="5">
+                                </div>
+                                <button type="submit" class="btn btn-red w-100 fw-bold">Crear Evaluación</button>
+                            </form>
+                        </div>
+
+                        <!-- Pestaña: Importar desde CSV -->
+                        <div class="tab-pane fade" id="csv" role="tabpanel">
+                            <form action="/profesor/importar_examen" method="POST" enctype="multipart/form-data">
+                                <div class="mb-3">
+                                    <label class="form-label">Título:</label>
+                                    <input type="text" name="titulo" class="form-control" required placeholder="Ej: Control 1 - Finley">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Sección:</label>
+                                    <input type="text" name="seccion" class="form-control" required placeholder="Ej: Sección 2">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Duración (Minutos):</label>
+                                    <input type="number" name="tiempo" class="form-control" value="60" required min="5">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Archivo CSV:</label>
+                                    <input type="file" name="archivo_csv" class="form-control" accept=".csv" required>
+                                    <div class="form-text">El CSV debe tener las columnas: numero_pregunta, pregunta, opcion_a, opcion_b, opcion_c, opcion_d, respuesta_correcta</div>
+                                </div>
+                                <button type="submit" class="btn btn-red w-100 fw-bold">Importar Examen</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-7 mb-4">
+                <div class="card shadow-sm p-4">
+                    <h4 class="fw-bold mb-3">Evaluaciones Creadas</h4>
+                    {% if evaluaciones %}
+                        {% for ev in evaluaciones %}
+                        <div class="card mb-3 evaluacion-card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h5 class="fw-bold mb-1">{{ ev.titulo }} <small class="text-muted">({{ ev.seccion }})</small></h5>
+                                        <small class="text-muted">&#9201; {{ ev.duracion_minutos }} min</small> | 
+                                        <span class="badge badge-code px-2 py-1">&#128273; {{ ev.codigo_acceso }}</span>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <a href="/profesor/evaluacion/{{ ev.id }}" class="btn btn-sm btn-outline-dark">Editar Preguntas</a>
+                                        <form action="/profesor/eliminar_evaluacion/{{ ev.id }}" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar esta evaluación? Perderás todas sus preguntas e intentos.');">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Eliminar</button>
+                                        </form>
+                                    </div>
+                                </div>
+                                <hr>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>Intentos recibidos:</strong> {{ ev.total_intentos }}
+                                        {% if ev.total_intentos > 0 %}
+                                            &nbsp;|&nbsp;
+                                            {% if ev.pendientes > 0 %}
+                                                <span class="estado-pendiente">{{ ev.pendientes }} pendiente(s)</span>
+                                            {% endif %}
+                                            {% if ev.pendientes > 0 and ev.completados > 0 %}
+                                                &nbsp;|&nbsp;
+                                            {% endif %}
+                                            {% if ev.completados > 0 %}
+                                                <span class="estado-completado">{{ ev.completados }} completada(s)</span>
+                                            {% endif %}
+                                            {% if ev.sin_desarrollo > 0 %}
+                                                {% if ev.pendientes > 0 or ev.completados > 0 %}&nbsp;|&nbsp;{% endif %}
+                                                <span class="estado-sin-desarrollo">{{ ev.sin_desarrollo }} sin desarrollo</span>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                    <a href="/profesor/evaluacion/{{ ev.id }}/intentos" class="btn btn-sm btn-red fw-bold">Ver Intentos</a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted">No has creado evaluaciones aún.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
