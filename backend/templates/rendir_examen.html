@@ -228,10 +228,11 @@
             if (inputSel) { guardarRespuesta(inputSel.getAttribute('data-pregunta-id'), inputSel.value); }
             else if (textarea) { guardarRespuesta(textarea.getAttribute('data-pregunta-id'), textarea.value); }
 
-            var fd = new FormData();
-            fd.append('razon_finalizacion', razon);
-
-            fetch('/estudiante/finalizar/' + evalId, { method: 'POST', body: fd })
+            fetch('/estudiante/finalizar/' + evalId, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ razon_finalizacion: razon })
+            })
                 .then(function(r) { return r.json(); })
                 .then(function(d) {
                     if (esInfraccion) {

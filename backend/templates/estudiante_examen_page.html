@@ -259,11 +259,12 @@
                 guardarRespuesta(textarea.getAttribute('data-pregunta-id'), textarea.value);
             }
 
-            // Enviar finalización al servidor
-            var fd = new FormData();
-            fd.append('razon_finalizacion', razon);
-
-            fetch('/estudiante/finalizar/' + evalId, { method: 'POST', body: fd })
+            // Enviar finalización al servidor como JSON
+            fetch('/estudiante/finalizar/' + evalId, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ razon_finalizacion: razon })
+            })
                 .then(function(r) { return r.json(); })
                 .then(function(d) {
                     if (esInfraccion) {

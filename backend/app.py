@@ -305,7 +305,11 @@ def guardar_respuesta(eval_id):
 def estudiante_finalizar(eval_id):
     conn = get_db()
     intento_id = session.get(f'intento_id_{eval_id}')
-    razon = request.form.get('razon_finalizacion', 'Completado Normal')
+    # Aceptar tanto form-data como JSON
+    if request.is_json:
+        razon = request.json.get('razon_finalizacion', 'Completado Normal')
+    else:
+        razon = request.form.get('razon_finalizacion', 'Completado Normal')
     
     if not intento_id:
         return redirect(url_for('estudiante_portal'))
