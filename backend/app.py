@@ -366,6 +366,15 @@ def estudiante_finalizar(eval_id):
     session.pop(f'acceso_autorizado_{eval_id}', None)
     session.pop(f'intento_id_{eval_id}', None)
 
+    # Si es una solicitud AJAX, devolver JSON con el resultado
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.best == 'application/json':
+        return jsonify({
+            'status': 'ok',
+            'puntaje_obtenido': puntaje_obtenido_auto,
+            'puntaje_total': puntaje_total_prueba,
+            'intento_id': intento_id
+        })
+
     return redirect(url_for('resultado_estudiante', intento_id=intento_id))
 
 @app.route('/estudiante/resultado/<int:intento_id>')

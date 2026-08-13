@@ -29,6 +29,51 @@
             margin: 20px auto 10px auto;
             display: block;
         }
+
+        /* Modal de Evaluación Entregada (anti-trampa) */
+        #modal-entregado {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+        #modal-entregado.show {
+            display: flex;
+        }
+        #modal-entregado .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            border-top: 6px solid #d9534f;
+        }
+        #modal-entregado .modal-content h2 {
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+        #modal-entregado .modal-content .puntaje-box {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1.5rem 0;
+        }
+        #modal-entregado .modal-content .puntaje-box .label {
+            font-size: 0.85rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        #modal-entregado .modal-content .puntaje-box .valor {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #212529;
+        }
     </style>
 </head>
 <body class="bg-light py-4">
@@ -66,14 +111,14 @@
         <div class="d-flex justify-content-between align-items-center" id="nav-buttons">
             <div>
                 {% if page > 1 %}
-                    <button class="btn btn-outline-secondary" onclick="navegarPagina({{ page - 1 }})">« Anterior</button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="navegarPagina({{ page - 1 }})">« Anterior</button>
                 {% else %}
                     <div></div>
                 {% endif %}
             </div>
             <div>
                 {% if page < total_p %}
-                    <button class="btn btn-primary" onclick="navegarPagina({{ page + 1 }})">Siguiente »</button>
+                    <button type="button" class="btn btn-primary" onclick="navegarPagina({{ page + 1 }})">Siguiente »</button>
                 {% else %}
                     <form action="/estudiante/finalizar/{{ evaluacion.id }}" method="POST" id="form-finalizar" onsubmit="limpiarTimerStorage();">
                         <input type="hidden" name="razon_finalizacion" value="Completado Normal">
@@ -92,6 +137,23 @@
             <div class="text-center mt-4" id="logo-container" style="display:none;"></div>
         {% endif %}
 
+    </div>
+
+    <!-- Modal de Evaluación Entregada (se muestra en lugar de redirigir) -->
+    <div id="modal-entregado">
+        <div class="modal-content">
+            <div class="mb-3">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo UDP" style="max-height: 80px;" onerror="this.style.display='none'">
+            </div>
+            <h2>Evaluación Entregada</h2>
+            <p class="text-muted">Tus respuestas han sido registradas e ingresadas con éxito en el sistema.</p>
+            <div class="puntaje-box">
+                <div class="label">Puntaje obtenido</div>
+                <div class="valor" id="puntaje-final">0 / 0 pts</div>
+            </div>
+            <p class="text-muted small">Puedes cerrar esta página o ventana sin problemas.</p>
+            <button type="button" class="btn btn-red" onclick="window.location.href='/estudiante'">Ir al Portal</button>
+        </div>
     </div>
 
     <script>
@@ -172,7 +234,6 @@
             fetch('/estudiante/rendir/' + evalId + '?page=' + pagina + '&ajax=1')
                 .then(response => response.text())
                 .then(html => {
-                    // Extraer solo el contenido de #pregunta-container del HTML recibido
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(html, 'text/html');
                     const nuevoContenido = doc.getElementById('pregunta-container');
@@ -180,23 +241,19 @@
                         document.getElementById('pregunta-container').innerHTML = nuevoContenido.innerHTML;
                     }
                     
-                    // Actualizar indicador de página
                     document.getElementById('page-indicator').textContent = pagina;
                     
-                    // Actualizar botones de navegación
                     const nuevosBotones = doc.getElementById('nav-buttons');
                     if (nuevosBotones) {
                         document.getElementById('nav-buttons').innerHTML = nuevosBotones.innerHTML;
                     }
                     
-                    // Actualizar logo
                     const nuevoLogo = doc.getElementById('logo-container');
                     if (nuevoLogo) {
                         document.getElementById('logo-container').innerHTML = nuevoLogo.innerHTML;
                         document.getElementById('logo-container').style.display = nuevoLogo.style.display;
                     }
                     
-                    // Actualizar URL sin recargar
                     history.pushState(null, null, '/estudiante/rendir/' + evalId + '?page=' + pagina);
                 })
                 .catch(err => console.error('Error al navegar:', err));
@@ -204,31 +261,49 @@
 
         let examenEnviado = false;
 
+        function mostrarModalResultado(puntajeObtenido, puntajeTotal) {
+            document.getElementById('puntaje-final').textContent = puntajeObtenido + ' / ' + puntajeTotal + ' pts';
+            document.getElementById('modal-entregado').classList.add('show');
+        }
+
         function finalizarPrueba(razon) {
             if (examenEnviado) return;
             examenEnviado = true;
 
             limpiarTimerStorage();
 
-            let form = document.getElementById('form-finalizar');
-            if (!form) {
-                form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '/estudiante/finalizar/' + evalId;
-                
-                let inputRazon = document.createElement('input');
-                inputRazon.type = 'hidden';
-                inputRazon.name = 'razon_finalizacion';
-                inputRazon.value = razon;
-                form.appendChild(inputRazon);
+            // Enviar finalización vía AJAX para obtener el resultado sin redirigir
+            const formData = new FormData();
+            formData.append('razon_finalizacion', razon);
 
-                document.body.appendChild(form);
-            } else {
-                let inputRazon = form.querySelector('input[name="razon_finalizacion"]');
-                if (inputRazon) inputRazon.value = razon;
-            }
-
-            form.submit();
+            fetch('/estudiante/finalizar/' + evalId, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Mostrar modal con el resultado en la misma página
+                mostrarModalResultado(data.puntaje_obtenido, data.puntaje_total);
+            })
+            .catch(() => {
+                // Fallback: submit tradicional si AJAX falla
+                let form = document.getElementById('form-finalizar');
+                if (!form) {
+                    form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = '/estudiante/finalizar/' + evalId;
+                    let inputRazon = document.createElement('input');
+                    inputRazon.type = 'hidden';
+                    inputRazon.name = 'razon_finalizacion';
+                    inputRazon.value = razon;
+                    form.appendChild(inputRazon);
+                    document.body.appendChild(form);
+                } else {
+                    let inputRazon = form.querySelector('input[name="razon_finalizacion"]');
+                    if (inputRazon) inputRazon.value = razon;
+                }
+                form.submit();
+            });
         }
 
         // 1. Ocultar o cambiar de pestaña / app
