@@ -43,6 +43,29 @@
                         <button type="submit" class="btn btn-red w-100 fw-bold">Crear Evaluación</button>
                     </form>
                 </div>
+
+                <div class="card shadow-sm p-4 mt-4">
+                    <h4 class="fw-bold mb-3">Importar Examen desde CSV</h4>
+                    <form action="/profesor/importar_examen" method="POST" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label class="form-label">Título:</label>
+                            <input type="text" name="titulo" class="form-control" required placeholder="Ej: Control 1 - Finley">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Sección:</label>
+                            <input type="text" name="seccion" class="form-control" required placeholder="Ej: Sección 2">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Duración (Minutos):</label>
+                            <input type="number" name="tiempo" class="form-control" value="60" required min="5">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Archivo CSV:</label>
+                            <input type="file" name="archivo_csv" class="form-control" accept=".csv" required>
+                        </div>
+                        <button type="submit" class="btn btn-red w-100 fw-bold">Importar Examen</button>
+                    </form>
+                </div>
             </div>
 
             <div class="col-md-7 mb-4">

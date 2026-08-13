@@ -3,7 +3,9 @@ import random
 import string
 import sqlite3
 import sys
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+import csv
+import io
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 
 base_dir = os.path.abspath(os.path.dirname(__file__))
 template_dir = os.path.join(base_dir, 'templates')
@@ -630,6 +632,53 @@ def ver_prueba_estudiante(intento_id):
 @app.route('/health')
 def health():
     return jsonify({'status': 'ok'})
+
+@app.route('/profesor/importar_examen', methods=['POST'])
+def importar_examen():
+    titulo = request.form.get('titulo')
+    seccion = request.form.get('seccion')
+    tiempo = request.form.get('tiempo', type=int)
+    archivo_csv = request.files.get('archivo_csv')
+
+    if not archivo_csv or not archivo_csv.filename.endswith('.csv'):
+        flash('Por favor selecciona un archivo CSV válido.', 'error')
+        return redirect(url_for('profesor_panel'))
+
+    # 1. Crear la evaluación en la tabla evaluaciones
+    codigo = generar_codigo_acceso()
+    conn = get_db()
+    evaluacion_id = db_execute_insert(conn, '''
+        INSERT INTO evaluaciones (titulo, seccion, duracion_minutos, codigo_acceso)
+        VALUES (?, ?, ?, ?)
+    ''', (titulo, seccion, tiempo, codigo))
+
+    # 2. Leer el CSV e insertar cada pregunta en la tabla preguntas
+    content = archivo_csv.read().decode("utf-8")
+    stream = io.StringIO(content)
+    lector_csv = csv.DictReader(stream)
+
+    orden = 1
+    for fila in lector_csv:
+        db_execute(conn, '''
+            INSERT INTO preguntas (evaluacion_id, tipo, enunciado, opcion_a, opcion_b, opcion_c, opcion_d, respuesta_correcta, puntaje, orden)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            evaluacion_id,
+            'opcion_multiple',
+            fila.get('pregunta', ''),
+            fila.get('opcion_a', ''),
+            fila.get('opcion_b', ''),
+            fila.get('opcion_c', ''),
+            fila.get('opcion_d', ''),
+            fila.get('respuesta_correcta', ''),
+            1.0,
+            orden
+        ))
+        orden += 1
+
+    conn.commit()
+    flash('¡Examen importado exitosamente!', 'success')
+    return redirect(url_for('profesor_panel'))
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
