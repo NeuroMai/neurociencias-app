@@ -266,6 +266,14 @@ def estudiante_rendir(eval_id):
         for r in saved:
             respuestas_guardadas[str(r['pregunta_id'])] = r['respuesta']
 
+    # Si es una solicitud AJAX, solo devolver el partial de la pregunta
+    if request.args.get('ajax') == '1':
+        return render_template('_pregunta_card.html', 
+                               pregunta=pregunta_actual, 
+                               page=page, 
+                               total_p=total_p,
+                               respuestas_guardadas=respuestas_guardadas)
+
     return render_template('estudiante_examen_page.html', 
                            evaluacion=evaluacion, 
                            pregunta=pregunta_actual, 
@@ -665,12 +673,12 @@ def importar_examen():
         ''', (
             evaluacion_id,
             'opcion_multiple',
-            fila.get('pregunta', ''),
-            fila.get('opcion_a', ''),
-            fila.get('opcion_b', ''),
-            fila.get('opcion_c', ''),
-            fila.get('opcion_d', ''),
-            fila.get('respuesta_correcta', ''),
+            (fila.get('pregunta', '') or '').strip(),
+            (fila.get('opcion_a', '') or '').strip(),
+            (fila.get('opcion_b', '') or '').strip(),
+            (fila.get('opcion_c', '') or '').strip(),
+            (fila.get('opcion_d', '') or '').strip(),
+            (fila.get('respuesta_correcta', '') or '').strip(),
             1.0,
             orden
         ))

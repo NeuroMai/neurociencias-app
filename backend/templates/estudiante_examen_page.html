@@ -44,7 +44,7 @@
         <div class="d-flex justify-content-between align-items-center bg-white p-3 rounded shadow-sm mb-3">
             <div>
                 <h5 class="m-0 fw-bold">{{ evaluacion.titulo }}</h5>
-                <small class="text-muted">Pregunta {{ page }} de {{ total_p }}</small>
+                <small class="text-muted">Pregunta <span id="page-indicator">{{ page }}</span> de <span id="total-p-indicator">{{ total_p }}</span></small>
             </div>
             <div class="bg-danger text-white px-3 py-2 rounded fw-bold fs-5">
                  <span id="timer">00:00</span>
@@ -57,63 +57,39 @@
            
 	</div>
 
-        <!-- Tarjeta de Pregunta -->
-        <div class="card shadow-sm p-4 mb-4">
-            <h4 class="mb-3">{{ page }}. {{ pregunta.enunciado }}</h4>
-            <p class="text-muted"><small>Puntaje: {{ pregunta.puntaje }} pto(s)</small></p>
-            <hr>
-
-            {% set resp_actual = respuestas_guardadas.get(pregunta.id|string, '') %}
-
-            {% if pregunta.tipo == 'opcion_multiple' %}
-                {% for opt, txt in [('A', pregunta.opcion_a), ('B', pregunta.opcion_b), ('C', pregunta.opcion_c), ('D', pregunta.opcion_d)] %}
-                    {% if txt %}
-                        <div class="form-check mb-2 fs-5">
-                            <input class="form-check-input" type="radio" name="respuesta" value="{{ opt }}" id="opt_{{ opt }}" {% if resp_actual == opt %}checked{% endif %} onchange="guardarRespuesta('{{ pregunta.id }}', this.value)">
-                            <label class="form-check-label" for="opt_{{ opt }}">{{ opt }}) {{ txt }}</label>
-                        </div>
-                    {% endif %}
-                {% endfor %}
-            {% elif pregunta.tipo == 'verdadero_falso' %}
-                <div class="form-check mb-2 fs-5">
-                    <input class="form-check-input" type="radio" name="respuesta" value="V" id="opt_v" {% if resp_actual == 'V' %}checked{% endif %} onchange="guardarRespuesta('{{ pregunta.id }}', this.value)">
-                    <label class="form-check-label" for="opt_v">Verdadero</label>
-                </div>
-                <div class="form-check mb-2 fs-5">
-                    <input class="form-check-input" type="radio" name="respuesta" value="F" id="opt_f" {% if resp_actual == 'F' %}checked{% endif %} onchange="guardarRespuesta('{{ pregunta.id }}', this.value)">
-                    <label class="form-check-label" for="opt_f">Falso</label>
-                </div>
-            {% elif pregunta.tipo == 'desarrollo' %}
-                <textarea class="form-control" rows="4" placeholder="Escribe tu respuesta corta aquí..." onblur="guardarRespuesta('{{ pregunta.id }}', this.value)">{{ resp_actual }}</textarea>
-            {% endif %}
+        <!-- Tarjeta de Pregunta (contenido dinámico) -->
+        <div id="pregunta-container">
+            {% include '_pregunta_card.html' %}
         </div>
 
         <!-- Botones de Navegación -->
-        <div class="d-flex justify-content-between align-items-center">
-            {% if page > 1 %}
-                <a href="/estudiante/rendir/{{ evaluacion.id }}?page={{ page - 1 }}" class="btn btn-outline-secondary" onclick="permitirNavegacionInterna()">« Anterior</a>
-            {% else %}
-                <div></div>
-            {% endif %}
-
-            {% if page < total_p %}
-                <a href="/estudiante/rendir/{{ evaluacion.id }}?page={{ page + 1 }}" class="btn btn-primary" onclick="permitirNavegacionInterna()">Siguiente »</a>
-            {% else %}
-                <div class="text-end">
-                    <form action="/estudiante/finalizar/{{ evaluacion.id }}" method="POST" id="form-finalizar" onsubmit="permitirNavegacionInterna(); limpiarTimerStorage();">
+        <div class="d-flex justify-content-between align-items-center" id="nav-buttons">
+            <div>
+                {% if page > 1 %}
+                    <button class="btn btn-outline-secondary" onclick="navegarPagina({{ page - 1 }})">« Anterior</button>
+                {% else %}
+                    <div></div>
+                {% endif %}
+            </div>
+            <div>
+                {% if page < total_p %}
+                    <button class="btn btn-primary" onclick="navegarPagina({{ page + 1 }})">Siguiente »</button>
+                {% else %}
+                    <form action="/estudiante/finalizar/{{ evaluacion.id }}" method="POST" id="form-finalizar" onsubmit="limpiarTimerStorage();">
                         <input type="hidden" name="razon_finalizacion" value="Completado Normal">
                         <button type="submit" class="btn btn-success btn-lg">Entregar Evaluación</button>
                     </form>
-                </div>
-            {% endif %}
+                {% endif %}
+            </div>
         </div>
 
         <!-- LOGO SECUNDARIO AL FINAL DE LA PRUEBA -->
         {% if page == total_p %}
-            <div class="text-center mt-4">
-                <!-- Reemplaza 'logo_secundario.png' por el nombre de tu archivo dentro de static/ -->
+            <div class="text-center mt-4" id="logo-container">
                 <img src="{{ url_for('static', filename='logo_secundario.png') }}" alt="Logo Institucional" class="logo-final" onerror="this.style.display='none'">
             </div>
+        {% else %}
+            <div class="text-center mt-4" id="logo-container" style="display:none;"></div>
         {% endif %}
 
     </div>
@@ -128,12 +104,6 @@
         const evalId = "{{ evaluacion.id }}";
         const duracionMinutos = {{ evaluacion.duracion_minutos }};
         let timerKey = 'examen_timer_' + evalId;
-        
-        let navegandoInternamente = false;
-
-        function permitirNavegacionInterna() {
-            navegandoInternamente = true;
-        }
         
         let tiempoRestanteSegundos = localStorage.getItem(timerKey);
         const limiteSegundos = duracionMinutos * 60;
@@ -186,6 +156,52 @@
             });
         }
 
+        // Navegación AJAX: cambia la pregunta sin recargar la página
+        function navegarPagina(pagina) {
+            // Guardar respuesta actual antes de navegar
+            const inputSeleccionado = document.querySelector('input[name="respuesta"]:checked');
+            const textarea = document.querySelector('textarea[name="respuesta"]');
+            if (inputSeleccionado) {
+                const pId = inputSeleccionado.getAttribute('data-pregunta-id');
+                guardarRespuesta(pId, inputSeleccionado.value);
+            } else if (textarea) {
+                const pId = textarea.getAttribute('data-pregunta-id');
+                guardarRespuesta(pId, textarea.value);
+            }
+
+            fetch('/estudiante/rendir/' + evalId + '?page=' + pagina + '&ajax=1')
+                .then(response => response.text())
+                .then(html => {
+                    // Extraer solo el contenido de #pregunta-container del HTML recibido
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const nuevoContenido = doc.getElementById('pregunta-container');
+                    if (nuevoContenido) {
+                        document.getElementById('pregunta-container').innerHTML = nuevoContenido.innerHTML;
+                    }
+                    
+                    // Actualizar indicador de página
+                    document.getElementById('page-indicator').textContent = pagina;
+                    
+                    // Actualizar botones de navegación
+                    const nuevosBotones = doc.getElementById('nav-buttons');
+                    if (nuevosBotones) {
+                        document.getElementById('nav-buttons').innerHTML = nuevosBotones.innerHTML;
+                    }
+                    
+                    // Actualizar logo
+                    const nuevoLogo = doc.getElementById('logo-container');
+                    if (nuevoLogo) {
+                        document.getElementById('logo-container').innerHTML = nuevoLogo.innerHTML;
+                        document.getElementById('logo-container').style.display = nuevoLogo.style.display;
+                    }
+                    
+                    // Actualizar URL sin recargar
+                    history.pushState(null, null, '/estudiante/rendir/' + evalId + '?page=' + pagina);
+                })
+                .catch(err => console.error('Error al navegar:', err));
+        }
+
         let examenEnviado = false;
 
         function finalizarPrueba(razon) {
@@ -217,35 +233,29 @@
 
         // 1. Ocultar o cambiar de pestaña / app
         document.addEventListener('visibilitychange', () => {
-            if (document.hidden && !navegandoInternamente) {
+            if (document.hidden) {
                 finalizarPrueba('Finalizado por salir de la pestaña o cambiar de aplicación');
             }
         });
 
-        // 2. Minimizar ventana o perder foco (Herramientas de captura / Clic fuera de la ventana)
+        // 2. Minimizar ventana o perder foco
         window.addEventListener('blur', () => {
-            if (!navegandoInternamente) {
-                finalizarPrueba('Finalizado por minimizar la ventana o perder foco');
-            }
+            finalizarPrueba('Finalizado por minimizar la ventana o perder foco');
         });
 
         // 3. DETECCIÓN DE APP ANDROID NATIVA
-        // Verificar si estamos dentro de la app Android
         if (typeof Android !== 'undefined' && Android.isScreenshotBlocked) {
             document.getElementById('screenshot-protection-badge').style.display = 'block';
             console.log('App Android detectada - Screenshots bloqueados por FLAG_SECURE');
         }
 
-        // 4. DETECCIÓN DE SCREENSHOT EN WEB (Prevención adicional)
-        // Detectar teclas de screenshot
+        // 4. DETECCIÓN DE SCREENSHOT EN WEB
         document.addEventListener('keydown', function(e) {
-            // PrintScreen key
             if (e.key === 'PrintScreen' || e.keyCode === 44) {
                 e.preventDefault();
                 finalizarPrueba('Finalizado por intento de captura de pantalla');
                 return false;
             }
-            // Mac: Cmd+Shift+3, Cmd+Shift+4, Cmd+Shift+5
             if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === '3' || e.key === '4' || e.key === '5')) {
                 e.preventDefault();
                 finalizarPrueba('Finalizado por intento de captura de pantalla');
@@ -253,7 +263,7 @@
             }
         });
 
-        // 5. Prevenir menú contextual (dificulta guardar imágenes)
+        // 5. Prevenir menú contextual
         document.addEventListener('contextmenu', function(e) {
             e.preventDefault();
         });
